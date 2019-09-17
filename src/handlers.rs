@@ -1,10 +1,5 @@
 use iron::prelude::*;
 use iron::status;
-use std::str::FromStr;
-use urlencoded::UrlEncodedBody;
-//extern crate serde_derive;
-
-//use router::Router;
 
 type HandlerFn = fn(&mut Request) -> IronResult<Response>;
 
@@ -25,10 +20,8 @@ pub fn get_handlers() -> Vec<Handler> {
         route: "/webpush/register".to_string(),
         handler: |req: &mut Request| -> IronResult<Response> {
             let response = match req.get::<bodyparser::Json>() {
-                Ok(Some(json_body)) => {
-                    println!("Parsed body:\n{:?}", json_body);
-                    Response::with(status::Ok)
-                }
+                // println!("Parsed body:\n{:?}", json_body);
+                Ok(Some(_json_body)) => Response::with(status::Ok),
                 Ok(None) => Response::with(status::NotAcceptable),
                 Err(_err) => Response::with(status::NotAcceptable),
             };
