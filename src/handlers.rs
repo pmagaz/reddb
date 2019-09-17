@@ -1,5 +1,9 @@
 use iron::prelude::*;
 use iron::status;
+use std::str::FromStr;
+use urlencoded::UrlEncodedBody;
+//extern crate serde_derive;
+
 //use router::Router;
 
 type HandlerFn = fn(&mut Request) -> IronResult<Response>;
@@ -11,25 +15,30 @@ pub enum Method {
 
 pub struct Handler {
     pub method: Method,
-    pub url: String,
+    pub route: String,
     pub handler: HandlerFn,
 }
 
 pub fn get_handlers() -> Vec<Handler> {
     let register = Handler {
         method: Method::Post,
-        url: "/webpush/register".to_string(),
-        handler: |_req: &mut Request| -> IronResult<Response> {
-            let mut response = Response::new();
-            response.set_mut(status::Ok);
-            println!("New request");
+        route: "/webpush/register".to_string(),
+        handler: |req: &mut Request| -> IronResult<Response> {
+            let response = match req.get::<bodyparser::Json>() {
+                Ok(Some(json_body)) => {
+                    println!("Parsed body:\n{:?}", json_body);
+                    Response::with(status::Ok)
+                }
+                Ok(None) => Response::with(status::NotAcceptable),
+                Err(_err) => Response::with(status::NotAcceptable),
+            };
             Ok(response)
         },
     };
 
     let send_push = Handler {
         method: Method::Get,
-        url: "/webpush/sendpush".to_string(),
+        route: "/webpush/sendpush".to_string(),
         handler: |_req: &mut Request| -> IronResult<Response> {
             let mut response = Response::new();
             response.set_mut(status::Ok);
