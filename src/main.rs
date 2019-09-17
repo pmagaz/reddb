@@ -1,19 +1,15 @@
+use dotenv::dotenv;
 use iron::prelude::*;
 use router::Router;
 
+use dotenv_codegen::dotenv;
+
 mod handlers;
 
-struct Server {
-    host: String,
-    port: usize,
-}
-
 fn main() {
-    let server_config = Server {
-        host: "localhost".to_string(),
-        port: 3000,
-    };
+    dotenv().ok();
     let mut router = Router::new();
+    
     for handler in handlers::get_handlers() {
         match handler.method {
             handlers::Method::Get => {
@@ -26,12 +22,7 @@ fn main() {
             }
         }
     }
-    let host_addr = [
-        server_config.host,
-        ":".to_string(),
-        server_config.port.to_string(),
-    ]
-    .concat();
+    let host_addr = dotenv!("HOST_ADDRESS");
 
     println!("Server up on http://{}", &host_addr);
     Iron::new(router).http(&host_addr).unwrap();

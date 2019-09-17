@@ -12,6 +12,9 @@ mime = "0.3.13"
 router = "0.6.0"
 urlencoded = "0.6.0"
 futures-preview = "0.3.0-alpha.18"
+dotenv = "0.14.1"
+dotenv_codegen = "0.14.1"
+
 
 [dependencies.bodyparser]
 git = "https://github.com/iron/body-parser.git"
