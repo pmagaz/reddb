@@ -4,12 +4,15 @@ use router::Router;
 
 use dotenv_codegen::dotenv;
 
+mod db;
 mod handlers;
 
 fn main() {
     dotenv().ok();
+    let db_path = dotenv!("DB_PATH").to_string();
+    let data = db::Db::new(db_path).start();
+    println!("DATA {:?}", data);
     let mut router = Router::new();
-    
     for handler in handlers::get_handlers() {
         match handler.method {
             handlers::Method::Get => {
