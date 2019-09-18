@@ -10,7 +10,7 @@ mod handlers;
 fn main() {
     dotenv().ok();
     let db_path = dotenv!("DB_PATH").to_string();
-    let data = db::Db::new(db_path).start();
+    let data = db::Db::new(db_path);
     println!("DATA {:?}", data);
     let mut router = Router::new();
     for handler in handlers::get_handlers() {
