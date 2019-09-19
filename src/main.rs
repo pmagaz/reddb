@@ -4,12 +4,16 @@ use router::Router;
 
 use dotenv_codegen::dotenv;
 
-mod db;
+mod dstore;
 mod handlers;
+use dstore::DStore;
+#[macro_use]
+extern crate quick_error;
 
 fn main() {
     dotenv().ok();
-    let data = db::Db::new(dotenv!("DB_PATH"));
+    let mut data = DStore::new(dotenv!("DB_PATH")).unwrap();
+    data.put("key", "value");
     println!("DATA {:?}", data);
     let mut router = Router::new();
     for handler in handlers::get_handlers() {
