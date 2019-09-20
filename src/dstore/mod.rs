@@ -48,7 +48,6 @@ impl DStore {
         let map = self.store.read()?;
         let mut file = self.handler.file.lock()?;
         let buf = bin_serialize(&*map).unwrap();
-        //file.set_len(0);
         file.write(&buf);
         file.sync_all()?;
         Ok(())
