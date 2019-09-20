@@ -1,3 +1,4 @@
+use std::sync::{Mutex};
 use std::fs::{File, OpenOptions};
 use std::io::Error;
 
@@ -8,7 +9,7 @@ pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Handler {
-    pub file: File,
+    pub file: Mutex<File>,
 }
 
 impl Handler {
@@ -19,6 +20,6 @@ impl Handler {
             .create(true)
             .open(&path)?;
 
-        Ok(Self { file: handler })
+        Ok(Self { file: Mutex::new(handler) })
     }
 }

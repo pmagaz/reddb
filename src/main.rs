@@ -13,7 +13,8 @@ extern crate quick_error;
 fn main() {
     dotenv().ok();
     let mut data = DStore::new(dotenv!("DB_PATH")).unwrap();
-    data.put("key", "value");
+    data.put("key".to_string(), "value".to_string())
+    .persist();
     println!("DATA {:?}", data);
     let mut router = Router::new();
     for handler in handlers::get_handlers() {
