@@ -29,11 +29,21 @@ impl DStore {
             .read_to_end(&mut buf)
             .unwrap();
 
-        let map: HashMap<String, String> = HashMap::new();
+        let map: HashMap<String, String> = if (!buf.is_empty()) {
+            bin_deserialize(&buf).unwrap()
+        } else {
+            HashMap::new()
+        };
         Ok(Self {
             handler: handler,
             store: RwLock::new(map),
         })
+    }
+
+    pub fn get(&self) -> Result<()> {
+        let data = self.store.read()?;
+        println!("aaaaaaa{:?}", data);
+        Ok(())
     }
 
     pub fn put(&mut self, key: String, value: String) -> &mut DStore {
