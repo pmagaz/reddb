@@ -30,9 +30,9 @@ pub struct DStore<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned>
 #[derive(Debug, Deserialize)]
 struct Collection {
     name: String,
+    data: HashMap<String, Document>,
     createdAt: String,
     updatedAt: String,
-    docs: Vec<Document>,
 }
 #[derive(Debug, Deserialize)]
 struct Document {
@@ -54,16 +54,21 @@ impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
 
         let mut map = HashMap::new();
         let collection: Collection = serde_json::from_slice(&buf).unwrap();
-        println!("aaaaaa{:?}", collection.docs);
-        //let map: HashMap<T, Document> = resp.docs;
+        //println!("aaaaaa{:?}", collection.docs);
+        let config: HashMap<String, Document> = collection.data; //serde_json::from_slice(&buf).unwrap();
+        println!("aaaaaa{:?}", config.len());
+        //let config: HashMap<String, String> = serde_json::from_slice(&buf).unwrap();
+
+        //serde_json::Map::
+        //let map3: HashMap<String, Document> = serde_json::from_str(collection);
         //let mut map2 = HashMap::new();
         //let map3: HashMap<T, Document> = serde_json::from_slice(&buf).unwrap();
 
         //let mut map = HashMap::new();
-        for doc in collection.docs {
-            // map.insert(doc.id,doc)
+        // for doc in collection.docs {
+        //     // map.insert(doc.id,doc)
 
-        }
+        // }
         Ok(Self {
             handler: handler,
             store: RwLock::new(map),
