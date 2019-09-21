@@ -7,6 +7,12 @@ quick_error! {
             cause(err)
             from()
         }
+        // json(serde_json::Error) {
+        //       description(err.description())
+        //     display("Json error: {}", err)
+        //     cause(err)
+        //     from() 
+        // }
         Poison {}
         NotFound {}
     }

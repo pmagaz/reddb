@@ -1,9 +1,14 @@
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{RwLock, RwLockWriteGuard};
+
 //use serde::{Serialize, Deserialize};
 use bincode::{deserialize as bin_deserialize, serialize as bin_serialize};
 
@@ -13,23 +18,26 @@ use handler::Handler;
 pub type Result<T> = result::Result<T, error::DStoreError>;
 
 #[derive(Debug)]
-pub struct DStore {
+pub struct DStore<T: Eq + Hash + Serialize + DeserializeOwned> {
     handler: Handler,
-    store: RwLock<HashMap<String, String>>,
+    store: RwLock<HashMap<T, T>>,
 }
 
-impl DStore {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore> {
+impl<T: Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore<T>> {
         let mut buf = Vec::new();
         let handler = Handler::new(path)?;
+        //print!("bufff{:?}", buf);
         handler
             .file
             .try_lock()
             .unwrap()
             .read_to_end(&mut buf)
             .unwrap();
+        //print!("bufff{:?}", buf);
 
-        let map: HashMap<String, String> = if (!buf.is_empty()) {
+        let map: HashMap<T, T> = if (!buf.is_empty()) {
+            //serde_json::from_value(&buf).unwrap()
             bin_deserialize(&buf).unwrap()
         } else {
             HashMap::new()
@@ -42,11 +50,11 @@ impl DStore {
 
     pub fn get(&self) -> Result<()> {
         let data = self.store.read()?;
-        println!("aaaaaaa{:?}", data);
+       // println!("aaaaaaa{}", data);
         Ok(())
     }
 
-    pub fn put(&mut self, key: String, value: String) -> &mut DStore {
+    pub fn put(&mut self, key: T, value: T) -> &mut DStore<T> {
         {
             let mut lock = self.store.write().unwrap();
             lock.insert(key, value);
