@@ -12,10 +12,22 @@ extern crate quick_error;
 
 fn main() {
     dotenv().ok();
-    let mut data = DStore::new(dotenv!("DB_PATH")).unwrap();
-    data.get();
-    data.put("key".to_string(), "value".to_string()).persist();
-    println!("DATA {:?}", data);
+    let mut db = DStore::new(dotenv!("DB_PATH")).unwrap();
+    let doc = r#"
+        {
+            "name": "John Doe",
+            "age": 43,
+            "phones": [
+                "+44 1234567",
+                "+44 2345678"
+            ]
+        }"#;
+        let data = doc.to_string();
+    db.get();
+    db.put("hola".to_string(), data);
+    db.persist();
+    //db.put("key".to_string(), "value".to_string()).persist();
+    //println!("DATA {:?}", data);
     let mut router = Router::new();
     for handler in handlers::get_handlers() {
         match handler.method {
