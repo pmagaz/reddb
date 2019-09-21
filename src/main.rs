@@ -9,23 +9,23 @@ mod handlers;
 use dstore::DStore;
 #[macro_use]
 extern crate quick_error;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 fn main() {
     dotenv().ok();
     let mut db = DStore::new(dotenv!("DB_PATH")).unwrap();
     let doc = r#"
         {
-            "name": "John Doe",
-            "age": 43,
-            "phones": [
-                "+44 1234567",
-                "+44 2345678"
-            ]
+            "id": 1,
+            "data": {
+            }
         }"#;
-        let data = doc.to_string();
-    db.get();
-    db.put("hola".to_string(), data);
-    db.persist();
+    let data = doc.to_string();
+    // db.get();
+    db.put(data, None);
+    // db.persist();
     //db.put("key".to_string(), "value".to_string()).persist();
     //println!("DATA {:?}", data);
     let mut router = Router::new();
