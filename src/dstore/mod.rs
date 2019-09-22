@@ -1,50 +1,41 @@
-use serde::de::DeserializeOwned;
-use serde::de::Deserializer;
-use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fmt::Debug;
-use std::fs::File;
-use std::io::BufReader;
-
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::io::{Read, Write};
+use std::fmt::Debug;
+use std::io::{BufRead, BufReader};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::result;
 use std::sync::{RwLock, RwLockWriteGuard};
-//use serde::{Serialize, Deserialize};
-//use bincode::{deserialize as bin_deserialize, serialize as bin_serialize};
 
 mod error;
 mod handler;
+//mod json;
+mod ser;
 use handler::Handler;
 pub type Result<T> = result::Result<T, error::DStoreError>;
 
 #[derive(Debug)]
-pub struct DStore<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> {
+pub struct DStore {
+    //pub struct DStore<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> {
     handler: Handler,
-    store: RwLock<HashMap<T, Document>>,
+    store: RwLock<HashMap<String, Document>>,
 }
 
-#[derive(Debug, Deserialize)]
-struct Collection {
-    name: String,
-    data: HashMap<String, Document>,
-    createdAt: String,
-    updatedAt: String,
-}
-#[derive(Debug, Deserialize)]
-struct Document {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Document {
+    //pub struct Document<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> {
     id: String,
-    user: String,
+    createdAt: String,
+    data: Value,
 }
 
-impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore<T>> {
+impl DStore {
+    //impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore> {
         let mut buf = Vec::new();
         let handler = Handler::new(path)?;
-        //print!("bufff{:?}", buf);
+        //TODO IMPROVE READ LINE BY LINE
         handler
             .file
             .try_lock()
@@ -52,23 +43,15 @@ impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
             .read_to_end(&mut buf)
             .unwrap();
 
-        let mut map = HashMap::new();
-        let collection: Collection = serde_json::from_slice(&buf).unwrap();
-        //println!("aaaaaa{:?}", collection.docs);
-        let config: HashMap<String, Document> = collection.data; //serde_json::from_slice(&buf).unwrap();
-        println!("aaaaaa{:?}", config.len());
-        //let config: HashMap<String, String> = serde_json::from_slice(&buf).unwrap();
+        let mut map: HashMap<String, Document> = HashMap::new();
 
-        //serde_json::Map::
-        //let map3: HashMap<String, Document> = serde_json::from_str(collection);
-        //let mut map2 = HashMap::new();
-        //let map3: HashMap<T, Document> = serde_json::from_slice(&buf).unwrap();
-
-        //let mut map = HashMap::new();
-        // for doc in collection.docs {
-        //     // map.insert(doc.id,doc)
-
-        // }
+        let lines = &mut buf.lines();
+        for (_index, line) in lines.enumerate() {
+            let content = &line.unwrap();
+            let doc: Document = serde_json::from_str(content).unwrap();
+            let key = doc.id.clone();
+            map.insert(key, doc);
+        }
         Ok(Self {
             handler: handler,
             store: RwLock::new(map),
@@ -77,18 +60,16 @@ impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
 
     pub fn get(&self) -> Result<()> {
         let data = self.store.read()?;
-        // println!("aaaaaaa{}", data);
+        println!("aaaaaaa{:?}", data.len());
         Ok(())
     }
 
-    pub fn put(&mut self, value: T, key: Option<u32>) -> &mut DStore<T> {
+    //TODO IMPLEMENT ONLY PERSISTS CHANGES
+    pub fn put(&mut self, value: String) -> &mut DStore {
         {
-            let key = match key {
-                Some(key) => key,
-                _ => 1,
-            };
             let mut lock = self.store.write().unwrap();
-            //lock.insert(key, value);
+            let doc: Document = serde_json::from_str(&value).unwrap();
+            lock.insert("value".to_string(), doc);
         }
         self
     }
@@ -96,8 +77,12 @@ impl<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> DStore<T> {
     pub fn persist(&mut self) -> Result<()> {
         let map = self.store.read()?;
         let mut file = self.handler.file.lock()?;
-        //let buf = serialize(&*map).unwrap();
-        //file.write(&buf);
+        let buf = ser::serialize(&*map).unwrap();
+        println!("aaaaaaa{}", map.len());
+
+        file.set_len(0);
+        file.seek(SeekFrom::Start(0));
+        file.write(&buf);
         file.sync_all()?;
         Ok(())
     }
