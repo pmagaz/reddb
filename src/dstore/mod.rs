@@ -48,7 +48,7 @@ impl DStore {
         let lines = &mut buf.lines();
         for (_index, line) in lines.enumerate() {
             let content = &line.unwrap();
-            let doc: Document = serde_json::from_str(content).unwrap();
+            let doc: Document = serde_json::from_str(content)?;
             let key = doc.id.clone();
             map.insert(key, doc);
         }
@@ -64,6 +64,7 @@ impl DStore {
         Ok(())
     }
 
+    //TODO RETURN RESULT
     //TODO IMPLEMENT ONLY PERSISTS CHANGES
     pub fn put(&mut self, value: String) -> &mut DStore {
         {
@@ -82,7 +83,8 @@ impl DStore {
 
         file.set_len(0);
         file.seek(SeekFrom::Start(0));
-        file.write(&buf);
+        file.write_all(&buf);
+        file.write_all(b"\n")?;
         file.sync_all()?;
         Ok(())
     }
