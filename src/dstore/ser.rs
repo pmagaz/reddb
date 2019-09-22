@@ -25,11 +25,11 @@ pub type Repr = String;
 pub type SerializeError = Error;
 pub type DeserializeError = ();
 
-pub fn serialize<T>(value: &T) -> YamlResult<String>
+pub fn serialize<T>(value: &T) -> YamlResult<Vec<u8>>
 where
     T: Serialize,
 {
-    serde_json::to_string(value)
+    serde_json::to_vec(value)
 }
 
 // pub fn deserialize2<'de, D>(deserializer: D) -> Result<HashMap<i64, Document>, D::Error>
@@ -47,8 +47,8 @@ pub fn deserialize<T, I: AsRef<[u8]>>(bytes: &I) -> Result<T, Error>
 where
     T: DeserializeOwned,
 {
-    let data: Value = serde_json::from_slice(bytes.as_ref()).unwrap();
-    let documents: &Vec<Value> = data["documents"].as_array().unwrap();
+    //let data: Value = serde_json::from_slice(bytes.as_ref()).unwrap();
+    //let documents: &Vec<Value> = data["documents"].as_array().unwrap();
     // let mut map = HashMap::new();
     // for item in Vec::<Document>::deserialize(deserializer)? {
     //     map.insert(item.id, item);

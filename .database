@@ -1,15 +1,5 @@
-{
-  "name": "leches",
-  "createdAt": "leches",
-  "updatedAt": "leches",
-  "data": {
-   "BCH": {
-      "id": "currency",
-      "user": "BCH"
-   },
-  "BCH2": {
-      "id": "currency",
-      "user": "BCH"
-   }
-}
-}
+{"id": "11111","createdAt": "BCH", "data":{}}
+{"id": "22222","createdAt": "BCH", "data":{}}
+{"id": "333333","createdAt": "BCH", "data":{}}
+{"id": "444444","createdAt": "BCH", "data":{}}
+{"id": "5555555","createdAt": "BCH", "data":{}}

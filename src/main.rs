@@ -23,9 +23,16 @@ fn main() {
             }
         }"#;
     let data = doc.to_string();
-    // db.get();
-    db.put(data, None);
-    // db.persist();
+    db.get();
+
+    db.put(r#"{"id": "66666666","createdAt": "BCH", "data":{}}"#.to_string());
+    db.put(r#"{"id": "77777777","createdAt": "BCH", "data":{}}"#.to_string());
+    //db.put(r#"{"id": "3333333","createdAt": "BCH", "data":{}}"#.to_string());
+    db.get();
+    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
+    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
+    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
+    db.persist();
     //db.put("key".to_string(), "value".to_string()).persist();
     //println!("DATA {:?}", data);
     let mut router = Router::new();
