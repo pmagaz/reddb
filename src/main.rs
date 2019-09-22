@@ -25,8 +25,8 @@ fn main() {
     let data = doc.to_string();
     db.get();
 
-    db.put(r#"{"id": "66666666","createdAt": "BCH", "data":{}}"#.to_string());
-    db.put(r#"{"id": "77777777","createdAt": "BCH", "data":{}}"#.to_string());
+    db.insert(r#"{"id": "66666666","createdAt": "BCH", "data":{}}"#.to_string());
+    db.insert(r#"{"id": "77777777","createdAt": "BCH", "data":{}}"#.to_string());
     //db.put(r#"{"id": "3333333","createdAt": "BCH", "data":{}}"#.to_string());
     db.get();
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());

@@ -1,13 +1,17 @@
 use std::sync::{Mutex};
 use std::fs::{File, OpenOptions};
-use std::io::Error;
+use std::io;
 use std::io::prelude::*;
+use std::io::{Error};
+//use std::io::prelude::*;
 use std::path::Path;
 use std::result;
-use std::io::{BufRead, BufReader};
+//use std::io::{BufRead, BufReader};
 
 pub type Result<T> = result::Result<T, Error>;
+use std::io::Read;
 
+//FIXME READ
 #[derive(Debug)]
 pub struct Handler {
     pub file: Mutex<File>,
@@ -23,4 +27,8 @@ impl Handler {
 
         Ok(Self { file: Mutex::new(handler) })
     }
+
+    // pub fn read(&self) -> BufReader {
+    //     BufReader::new(self.file);
+    // }
 }
