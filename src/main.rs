@@ -9,9 +9,6 @@ mod handlers;
 use dstore::DStore;
 #[macro_use]
 extern crate quick_error;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 fn main() {
     dotenv().ok();
@@ -25,8 +22,8 @@ fn main() {
     let data = doc.to_string();
     db.get();
 
-    db.insert(r#"{"id": "66666666","createdAt": "BCH", "data":{}}"#.to_string());
-    db.insert(r#"{"id": "77777777","createdAt": "BCH", "data":{}}"#.to_string());
+    db.insert(r#"{"id": "66666666","created_at": "BCH", "data":{}}"#.to_string());
+    db.insert(r#"{"id": "77777777","created_at": "BCH", "data":{}}"#.to_string());
     //db.put(r#"{"id": "3333333","createdAt": "BCH", "data":{}}"#.to_string());
     db.get();
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
