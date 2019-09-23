@@ -3,11 +3,14 @@ quick_error! {
     pub enum DStoreError {
         Io(err: ::std::io::Error) {
             description(err.description())
-            display("IO error: {}", err)
+            display("[ERR]: IO error {}", err)
             cause(err)
             from()
         }
-         Deserialize(err: serde_json::Error) {
+         Serialize(err: serde_json::Error) {
+            description(err.description())
+            display("[ERR] Deserialize error: {}", err)
+            cause(err)
             from()
         }
         Poison {}
