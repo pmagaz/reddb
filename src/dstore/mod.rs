@@ -31,7 +31,7 @@ pub struct DStore {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Document {
     #[serde(skip_serializing, skip_deserializing)]
-    uuid: Uuid,
+    _id: Uuid,
     #[serde(skip_serializing, skip_deserializing)]
     data: Value,
     #[serde(skip_serializing, skip_deserializing)]
@@ -40,7 +40,7 @@ pub struct Document {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Doc2 {
-    uuid: Uuid,
+    _id: Uuid,
     data: Value,
 }
 
@@ -65,7 +65,7 @@ impl DStore {
             let data: Value = serde_json::from_str(content)?;
             // println!("DATA{:?}", data);
             let doc = Document {
-                uuid: Uuid::new_v4(),
+                _id: Uuid::new_v4(),
                 data: data,
                 status: Status::NotSaved,
             };
@@ -79,7 +79,7 @@ impl DStore {
 
     pub fn create_doc(&self, data: Value) -> Document {
         Document {
-            uuid: Uuid::new_v4(),
+            _id: Uuid::new_v4(),
             data: data,
             status: Status::NotSaved,
         }
@@ -92,7 +92,7 @@ impl DStore {
             let data: Value = serde_json::from_str(&value).unwrap();
             println!("DATA{:?}", data);
             let doc = self.create_doc(data);
-            map.insert(doc.uuid.clone(), doc);
+            map.insert(doc._id.clone(), doc);
         }
         self
     }
@@ -102,31 +102,21 @@ impl DStore {
         println!("STORE LEN{:?}", map);
     }
 
-    pub fn data_to_persist<'a>(&self, map: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
-        let new_map: Vec<Value> = map
+    pub fn serialize_data<'a>(&self, map: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
+        let serialized_doc: Vec<Value> = map
             .iter()
             .filter(|(_, doc)| doc.status == Status::NotSaved)
             .map(|(_, doc)| {
                 let mut value = json!({
-                    "uuid": doc.uuid,
+                    "_id": doc._id,
                 });
-                //let mut object = Value::new_object();
                 for (k, v) in doc.data.as_object().unwrap().iter() {
-                    println!("NEW_MAP{:?} {:?}", k, v);
-                    //value.put(k, v);
-                    //value[k] = v;
-                    //k
+                    value[k] = v.clone();
                 }
-                //println!("NEW_MAP{:?}", value);
                 value
-                // Value {
-                //     uuid: doc.uuid,
-                //     data: doc.data.clone(),
-                // }
-                //doc
             })
             .collect();
-        new_map
+        serialized_doc
     }
 
     //TODO split new_map into a new function
@@ -134,14 +124,14 @@ impl DStore {
     pub fn persist(&mut self) -> Result<()> {
         let map = self.store.read()?;
         let mut file = self.handler.file.lock()?;
-        let data_to_persist = self.data_to_persist(&map);
+        let data_to_persist = self.serialize_data(&map);
         let buf = json::serialize(&data_to_persist)?;
 
         println!("STORE LEN{:?}", buf);
         //file.set_len(0);
         file.seek(SeekFrom::End(0))?;
-        // file.write_all(&buf)?;
-        // file.write_all(b"\n")?;
+        file.write_all(&buf)?;
+        file.write_all(b"\n")?;
         file.sync_all()?;
         Ok(())
     }
