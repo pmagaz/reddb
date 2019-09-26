@@ -24,23 +24,19 @@ pub type DStoreHashMap = HashMap<Uuid, Document>;
 pub struct DStore {
     //pub struct DStore<T: std::fmt::Debug + Eq + Hash + Serialize + DeserializeOwned> {
     handler: Handler,
-    store: RwLock<HashMap<Uuid, Document>>,
+    store: RwLock<DStoreHashMap>,
 }
 
 //TODO REMOVE DUPLICATE HASHMAP K / ID
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
-    #[serde(skip_serializing, skip_deserializing)]
-    _id: Uuid,
-    #[serde(skip_serializing, skip_deserializing)]
     data: Value,
     #[serde(skip_serializing, skip_deserializing)]
     status: Status,
 }
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Doc2 {
-    _id: Uuid,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonDocument {
+    _id: Value,
     data: Value,
 }
 
@@ -61,15 +57,17 @@ impl DStore {
 
         for (_index, line) in buf.lines().enumerate() {
             let content = &line.unwrap();
-            let uuid = Uuid::new_v4();
-            let data: Value = serde_json::from_str(content)?;
-            // println!("DATA{:?}", data);
-            let doc = Document {
-                _id: Uuid::new_v4(),
-                data: data,
-                status: Status::NotSaved,
+            let json_doc: JsonDocument = serde_json::from_str(content)?;
+            let _id = match &json_doc._id.as_str() {
+                Some(_id) => Uuid::parse_str(_id).unwrap(),
+                None => panic!("Wrong Uuid format!"),
             };
-            map.insert(uuid, doc);
+
+            let doc = Document {
+                data: json_doc.data,
+                status: Status::Saved,
+            };
+            map.insert(_id, doc);
         }
         Ok(Self {
             handler: handler,
@@ -77,57 +75,45 @@ impl DStore {
         })
     }
 
-    pub fn create_doc(&self, data: Value) -> Document {
-        Document {
-            _id: Uuid::new_v4(),
-            data: data,
+    //TODO should return inserted value
+    pub fn insert(&mut self, value: String) -> Value {
+        let mut map = self.store.write().unwrap();
+        let json_data: Value = serde_json::from_str(&value).unwrap();
+        let doc = Document {
+            data: json_data,
             status: Status::NotSaved,
-        }
+        };
+        let _id = Uuid::new_v4();
+        let json_doc = self.to_jsondoc(&_id, &doc);
+        map.insert(_id, doc);
+        json_doc
     }
 
-    //TODO should return inserted value
-    pub fn insert(&mut self, value: String) -> &mut DStore {
-        {
-            let mut map = self.store.write().unwrap();
-            let data: Value = serde_json::from_str(&value).unwrap();
-            println!("DATA{:?}", data);
-            let doc = self.create_doc(data);
-            map.insert(doc._id.clone(), doc);
-        }
-        self
+    pub fn to_jsondoc(&self, _id: &Uuid, doc: &Document) -> Value {
+        let mut json_value: Value = serde_json::to_value(doc).unwrap();
+        json_value["_id"] = Value::String(_id.to_string());
+        json_value.clone()
     }
 
     pub fn get(&self) {
         let map = self.store.read().unwrap();
-        println!("STORE LEN{:?}", map);
+        //println!("STORE LEN{:?}", map);
     }
 
-    pub fn serialize_data<'a>(&self, map: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
+    pub fn jsondocs_tosave<'a>(&self, map: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
         let serialized_doc: Vec<Value> = map
             .iter()
-            .filter(|(_, doc)| doc.status == Status::NotSaved)
-            .map(|(_, doc)| {
-                let mut value = json!({
-                    "_id": doc._id,
-                });
-                for (k, v) in doc.data.as_object().unwrap().iter() {
-                    value[k] = v.clone();
-                }
-                value
-            })
+            .filter(|(_k, v)| v.status == Status::NotSaved)
+            .map(|(_id, doc)| self.to_jsondoc(&_id, &doc))
             .collect();
         serialized_doc
     }
 
-    //TODO split new_map into a new function
-    //TODO should add \n after every hashmap
     pub fn persist(&mut self) -> Result<()> {
         let map = self.store.read()?;
         let mut file = self.handler.file.lock()?;
-        let data_to_persist = self.serialize_data(&map);
-        let buf = json::serialize(&data_to_persist)?;
-
-        println!("STORE LEN{:?}", buf);
+        let json_docs = self.jsondocs_tosave(&map);
+        let buf = json::serialize(&json_docs)?;
         //file.set_len(0);
         file.seek(SeekFrom::End(0))?;
         file.write_all(&buf)?;
