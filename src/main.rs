@@ -20,7 +20,8 @@ fn main() {
             }
         }"#;
     let data = doc.to_string();
-    db.insert(r#"{"name":"peter", "leches": "booo"}"#.to_string());
+    let doc = db.insert(r#"{"name":"peter", "leches": "booo"}"#.to_string());
+    println!("DOC{:?}", doc);
     db.insert(r#"{"name":"john"}"#.to_string());
     //db.put(r#"{"id": "3333333","createdAt": "BCH", "data":{}}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
