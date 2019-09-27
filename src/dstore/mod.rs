@@ -70,6 +70,10 @@ impl DStore {
         self.store.find_by_id(id).unwrap()
     }
 
+    pub fn find(&self, data: String) -> Value {
+        self.store.find(data).unwrap()
+    }
+
     pub fn get(&self) {
         self.store.get().unwrap()
     }

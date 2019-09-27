@@ -7,6 +7,7 @@ quick_error! {
             cause(err)
             from()
         }
+        // FIXME
         // None(err: ::std::option::NoneError) {
         //     from()
         // }

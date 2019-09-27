@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::Error;
 use std::result;
 use std::sync::RwLock;
 use uuid::Uuid;
 
+use super::error;
 use super::json;
 use super::status;
-use super::error;
 
 pub type Result<T> = result::Result<T, error::DStoreError>;
 pub type DStoreHashMap = HashMap<Uuid, Document>;
@@ -60,7 +59,13 @@ impl Store {
         Ok(result)
     }
 
-    pub fn get(&self)  -> Result<()>{
+    pub fn find(&self, data: String) -> Result<Value> {
+        let store = self.data.read()?;
+        let json_data: Value = serde_json::from_str(&data)?;
+        Ok(json_data)
+    }
+
+    pub fn get(&self) -> Result<()> {
         let data = self.data.read()?;
         println!("STORE DATA{:?}", &data);
         Ok(())
