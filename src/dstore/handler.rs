@@ -5,7 +5,6 @@ use std::result;
 use std::sync::Mutex;
 
 pub type Result<T> = result::Result<T, Error>;
-use std::io::Read;
 
 //FIXME READ
 #[derive(Debug)]
@@ -20,6 +19,9 @@ impl Handler {
             .append(true)
             .create(true)
             .open(&path)?;
+
+        println!("[DStore] Seting up db");
+
 
         Ok(Self {
             file: Mutex::new(handler),
