@@ -3,7 +3,6 @@ use iron::prelude::*;
 use router::Router;
 
 use dotenv_codegen::dotenv;
-
 mod dstore;
 mod handlers;
 use dstore::DStore;
@@ -20,13 +19,12 @@ fn main() {
             }
         }"#;
     let data = doc.to_string();
-    let doc = db.insert(r#"{"name":"peter", "leches": "booo"}"#.to_string());
+    let doc = db.insert(data);
     let _id = &doc["_id"];
     println!("DOC {:?}", &_id);
     let result = db.find_by_id(&_id);
     println!("RESULT {:?}", result);
-    //db.insert(r#"{"name":"john"}"#.to_string());
-    //db.put(r#"{"id": "3333333","createdAt": "BCH", "data":{}}"#.to_string());
+    db.insert(r#"{"name":"john"}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
