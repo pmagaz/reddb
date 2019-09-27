@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_json::Value;
 
 use std::collections::HashMap;
@@ -60,7 +59,7 @@ impl DStore {
             let json_doc: JsonDocument = serde_json::from_str(content)?;
             let _id = match &json_doc._id.as_str() {
                 Some(_id) => Uuid::parse_str(_id).unwrap(),
-                None => panic!("Wrong Uuid format!"),
+                None => panic!("ERR: Wrong Uuid format!"),
             };
 
             let doc = Document {
@@ -86,6 +85,9 @@ impl DStore {
         let _id = Uuid::new_v4();
         let json_doc = self.to_jsondoc(&_id, &doc);
         map.insert(_id, doc);
+        let leches = map.get(&_id);
+        println!("LECHES{:?}", leches);
+
         json_doc
     }
 
@@ -95,9 +97,24 @@ impl DStore {
         json_value.clone()
     }
 
+    pub fn to_jsonresult(&self, _id: &Uuid, doc: &Document) -> Value {
+        let mut json_value: Value = serde_json::to_value(doc).unwrap();
+        json_value["data"]["_id"] = Value::String(_id.to_string());
+        json_value["data"].clone()
+    }
+
+    pub fn find_by_id(&self, id: &Value) -> Value {
+        let map = self.store.read().unwrap();
+        let id = id.as_str().unwrap();
+        let _id = Uuid::parse_str(id).unwrap();
+        let doc = map.get(&_id).unwrap();
+        let result = self.to_jsonresult(&_id, &doc);
+        result
+    }
+
     pub fn get(&self) {
         let map = self.store.read().unwrap();
-        //println!("STORE LEN{:?}", map);
+        println!("STORE DATA{:?}", map);
     }
 
     pub fn jsondocs_tosave<'a>(&self, map: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
