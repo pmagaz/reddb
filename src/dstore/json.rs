@@ -10,6 +10,13 @@ where
     serde_json::to_vec(value)
 }
 
+pub fn _from_str<T>(value: &str) -> JsonResult<Value>
+where
+    T: Serialize,
+{
+    serde_json::from_str(value)
+}
+
 pub fn to_jsondoc<T>(_id: &Uuid, doc: &T) -> JsonResult<Value>
 where
     T: Serialize,
