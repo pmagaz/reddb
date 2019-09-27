@@ -20,8 +20,7 @@ impl Handler {
             .create(true)
             .open(&path)?;
 
-        println!("[DStore] Seting up db");
-
+        println!("[DStore] Seting up persistence");
 
         Ok(Self {
             file: Mutex::new(handler),

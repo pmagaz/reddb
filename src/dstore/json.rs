@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Result as JsonResult;
-use serde_json::{Error, Value};
+use serde_json::Value;
 use uuid::Uuid;
 
 pub fn serialize<T>(value: &T) -> JsonResult<Vec<u8>>
