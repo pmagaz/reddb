@@ -3,6 +3,7 @@ use std::io::Error;
 use std::path::Path;
 use std::result;
 use std::sync::{Mutex, RwLock, RwLockWriteGuard};
+use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -13,11 +14,11 @@ pub struct Document {
 
 #[derive(Debug)]
 pub struct Store {
-    store: RwLock<HashMap<String, Document>>,
+    store: RwLock<HashMap<Uuid, Document>>,
 }
 
 impl Store {
-    pub fn new(data: HashMap<String, Document>) -> Result<Store> {
+    pub fn new(data: HashMap<Uuid, Document>) -> Result<Store> {
         Ok(Store {
             store: RwLock::new(data),
         })
