@@ -63,15 +63,15 @@ impl DStore {
     }
 
     pub fn insert(&mut self, data: String) -> Value {
-        self.store.insert(data)
+        self.store.insert(data).unwrap()
     }
 
     pub fn find_by_id(&self, id: &Value) -> Value {
-        self.store.find_by_id(id)
+        self.store.find_by_id(id).unwrap()
     }
 
     pub fn get(&self) {
-        self.store.get()
+        self.store.get().unwrap()
     }
 
     pub fn jsondocs_tosave<'a>(&self, store: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {

@@ -3,7 +3,16 @@ quick_error! {
     pub enum DStoreError {
         Io(err: ::std::io::Error) {
             description(err.description())
-            display("[ERR]: IO error {}", err)
+            display("[ERR]:IO error {}", err)
+            cause(err)
+            from()
+        }
+        // None(err: ::std::option::NoneError) {
+        //     from()
+        // }
+        Uuid(err: ::uuid::parser::ParseError) {
+            description(err.description())
+            display("[ERR]:Uuid error {}", err)
             cause(err)
             from()
         }
