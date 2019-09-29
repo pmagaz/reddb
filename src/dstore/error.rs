@@ -13,14 +13,17 @@ quick_error! {
         // }
         Uuid(err: ::uuid::parser::ParseError) {
             description(err.description())
-            display("[ERR]:Uuid error {}", err)
+            display("[ERR] Uuid error {}", err)
             cause(err)
             from()
         }
-         Serialize(err: serde_json::Error) {
+         Serialize(err: super::json::SerializeError) {
             description(err.description())
             display("[ERR] Deserialize error: {}", err)
             cause(err)
+            from()
+        }
+        Deserialize(err: super::json::DeserializeError) {
             from()
         }
         Poison {}

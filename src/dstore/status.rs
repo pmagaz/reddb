@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, PartialEq, Deserialize)]
 pub enum Status {
     Saved,
+    Deleted,
     NotSaved,
 }
 
