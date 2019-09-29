@@ -62,7 +62,22 @@ impl Store {
     pub fn find(&self, data: String) -> Result<Value> {
         let store = self.data.read()?;
         let json_data: Value = serde_json::from_str(&data)?;
-        Ok(json_data)
+        let mut found = Vec::new();
+        for (key, doc) in store.iter() {
+            for (prop, value) in json_data.as_object().unwrap().iter() {
+                match &doc.data.get(prop) {
+                    Some(x) => {
+                        if x == &value {
+                            found.push(json::to_jsonresult(&key, &doc).unwrap())
+                        }
+                    }
+                    None => (),
+                };
+            }
+        }
+        let docs = Value::Array(found);
+        println!("FIND RESULT {:?}", docs);
+        Ok(docs)
     }
 
     pub fn get(&self) -> Result<()> {

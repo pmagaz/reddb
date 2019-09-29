@@ -79,12 +79,12 @@ impl DStore {
     }
 
     pub fn jsondocs_tosave<'a>(&self, store: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<Value> {
-        let serialized_doc: Vec<Value> = store
+        let json_docs: Vec<Value> = store
             .iter()
             .filter(|(_k, v)| v.status == Status::NotSaved)
             .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
             .collect();
-        serialized_doc
+        json_docs
     }
 
     pub fn persist(&mut self) -> Result<()> {
