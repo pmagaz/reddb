@@ -1,13 +1,13 @@
+use super::error;
+use super::json;
+use super::status;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::result;
 use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
 use uuid::Uuid;
-
-use super::error;
-use super::json;
-use super::status;
 
 pub type Result<T> = result::Result<T, error::DStoreError>;
 pub type DStoreHashMap = HashMap<Uuid, Document>;
@@ -84,5 +84,21 @@ impl Store {
         let data = self.data.read()?;
         println!("STORE DATA{:?}", &data);
         Ok(())
+    }
+
+    pub fn format_jsondocs<'a>(&self) -> Vec<u8> {
+        let data = self.data.read().unwrap();
+
+        let formated_docs: Vec<u8> = data
+            .iter()
+            .filter(|(_k, v)| v.status == status::Status::NotSaved)
+            .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
+            .flat_map(|doc| {
+                let mut doc_vector = serde_json::to_vec(&doc).unwrap();
+                doc_vector.extend("\n".as_bytes());
+                doc_vector
+            })
+            .collect();
+        formated_docs
     }
 }
