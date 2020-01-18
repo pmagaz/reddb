@@ -1,15 +1,7 @@
-/node_modules
-/coverage
-/build
 /target
 /pkg
-dist
 .DS_Store
 /.cache
 .cache
-package.json.lock
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 wasm-pack.log
 .database
