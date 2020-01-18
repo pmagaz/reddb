@@ -1,23 +1,20 @@
 [package]
-name = "rust-webpush-server"
+name = "dstore"
 version = "0.1.0"
 authors = ["pmagaz <magazpablo@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 iron = "0.6.1"
-mime = "0.3.13"
+mime = "0.3.16"
 router = "0.6.0"
-quick-error = "1.2.2"
+quick-error = "1.2.3"
 urlencoded = "0.6.0"
-futures-preview = "0.3.0-alpha.18"
-dotenv = "0.14.1"
-uuid = { version = "0.7.4", features = ["serde", "v4"] }
-bincode = "1.1.4"
-serde_json = "1.0.40"
-dotenv_codegen = "0.14.1"
+dotenv = "0.15.0"
+uuid = { version = "0.7.4", features = ["serde", "v4", "v1", "v3"] }
+bincode = "1.2.1"
+serde_json = "1.0.44"
+dotenv_codegen = "0.15.0"
 serde = { version = "1.0", features = ["derive"] }
 
 
