@@ -28,7 +28,7 @@ pub fn to_jsondoc<T>(_id: &Uuid, doc: &T) -> JsonResult<Value>
 where
     T: Serialize,
 {
-    let mut json_value: Value = serde_json::to_value(doc).unwrap();
+    let mut json_value: Value = serde_json::to_value(doc)?;
     json_value["_id"] = Value::String(_id.to_string());
     Ok(json_value.clone())
 }
@@ -37,7 +37,7 @@ pub fn to_jsonresult<T>(_id: &Uuid, doc: &T) -> JsonResult<Value>
 where
     T: Serialize,
 {
-    let mut json_value: Value = serde_json::to_value(doc).unwrap();
+    let mut json_value: Value = serde_json::to_value(doc)?;
     json_value["data"]["_id"] = Value::String(_id.to_string());
     Ok(json_value["data"].clone())
 }
