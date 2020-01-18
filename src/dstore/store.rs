@@ -1,12 +1,12 @@
 use super::error;
 use super::json;
-use super::status;
+use super::status::Status;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::io::Lines;
 use std::result;
 use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
 use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, error::DStoreError>;
@@ -16,13 +16,7 @@ pub type DStoreHashMap = HashMap<Uuid, Document>;
 pub struct Document {
     pub data: Value,
     #[serde(skip_serializing, skip_deserializing)]
-    pub status: status::Status,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonDocument {
-    pub _id: Value,
-    pub data: Value,
+    pub status: Status,
 }
 
 #[derive(Debug)]
@@ -31,9 +25,25 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(data: DStoreHashMap) -> Result<Store> {
-        Ok(Store {
-            data: RwLock::new(data),
+    pub fn new(buf: Lines<&[u8]>) -> Result<Store> {
+        println!("[DStore] Parsing database into memory");
+        let mut map_store: DStoreHashMap = HashMap::new();
+        for (_index, line) in buf.enumerate() {
+            let content = &line.unwrap();
+            let json_doc = json::from_str(&content).unwrap();
+            let _id = match &json_doc._id.as_str() {
+                Some(_id) => Uuid::parse_str(_id).unwrap(),
+                None => panic!("ERR: Wrong Uuid format!"),
+            };
+            let doc = Document {
+                data: json_doc.data,
+                status: Status::Saved,
+            };
+            map_store.insert(_id, doc);
+        }
+
+        Ok(Self {
+            data: RwLock::new(map_store),
         })
     }
 
@@ -42,7 +52,7 @@ impl Store {
         let json_data: Value = serde_json::from_str(&value)?;
         let doc = Document {
             data: json_data,
-            status: status::Status::NotSaved,
+            status: Status::NotSaved,
         };
         let _id = Uuid::new_v4();
         let json_doc = json::to_jsondoc(&_id, &doc)?;
@@ -88,13 +98,12 @@ impl Store {
 
     pub fn format_jsondocs<'a>(&self) -> Vec<u8> {
         let data = self.data.read().unwrap();
-
         let formated_docs: Vec<u8> = data
             .iter()
-            .filter(|(_k, v)| v.status == status::Status::NotSaved)
+            .filter(|(_k, v)| v.status == Status::NotSaved)
             .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
             .flat_map(|doc| {
-                let mut doc_vector = serde_json::to_vec(&doc).unwrap();
+                let mut doc_vector = json::serialize(&doc).unwrap();
                 doc_vector.extend("\n".as_bytes());
                 doc_vector
             })

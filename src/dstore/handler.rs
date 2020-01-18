@@ -1,5 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io::Error;
+use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::result;
 use std::sync::Mutex;
@@ -25,5 +26,12 @@ impl Handler {
         Ok(Self {
             file: Mutex::new(handler),
         })
+    }
+
+    //TODO read line by line
+    pub fn read_content(&self, mut buf: &mut Vec<u8>) -> usize {
+        println!("[DStore] Reading database content");
+        let content = self.file.try_lock().unwrap().read_to_end(&mut buf).unwrap();
+        content
     }
 }
