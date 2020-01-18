@@ -5,3 +5,4 @@
 .cache
 wasm-pack.log
 .database
+.database*
