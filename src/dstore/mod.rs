@@ -1,9 +1,9 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+
 use std::path::Path;
 use std::result;
-use std::sync::RwLockReadGuard;
 use uuid::Uuid;
 
 mod error;
@@ -76,19 +76,11 @@ impl DStore {
         self.store.get().unwrap()
     }
 
-    //TODO change to write_all
     pub fn persist(&mut self) -> Result<()> {
-        let store = self.store.data.read()?;
         let mut file = self.handler.file.lock()?;
+        let docs_to_save = self.store.format_jsondocs();
         file.seek(SeekFrom::End(0))?;
-
-        for (id, doc) in store.iter().filter(|(_k, v)| v.status == Status::NotSaved) {
-            let mydoc = json::to_jsondoc(&id, &doc).unwrap();
-            let mut json_string = serde_json::to_string(&mydoc).unwrap();
-            json_string.push('\n');
-            let content = &json_string.as_bytes();
-            file.write(&content)?;
-        }
+        file.write_all(&docs_to_save)?;
         file.sync_all()?;
         Ok(())
     }
