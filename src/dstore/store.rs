@@ -29,10 +29,10 @@ impl Store {
         println!("[DStore] Parsing database into memory");
         let mut map_store: DStoreHashMap = HashMap::new();
         for (_index, line) in buf.enumerate() {
-            let content = &line.unwrap();
-            let json_doc = json::from_str(&content).unwrap();
+            let content = &line?;
+            let json_doc = json::from_str(&content)?;
             let _id = match &json_doc._id.as_str() {
-                Some(_id) => Uuid::parse_str(_id).unwrap(),
+                Some(_id) => Uuid::parse_str(_id)?,
                 None => panic!("ERR: Wrong Uuid format!"),
             };
             let doc = Document {
@@ -61,6 +61,7 @@ impl Store {
     }
 
     pub fn find_by_id(&self, id: &Value) -> Result<Value> {
+        //TODO fix error
         let store = self.data.read()?;
         let id = id.as_str().unwrap();
         let _id = Uuid::parse_str(id)?;
@@ -78,7 +79,7 @@ impl Store {
                 match &doc.data.get(prop) {
                     Some(x) => {
                         if x == &value {
-                            found.push(json::to_jsonresult(&key, &doc).unwrap())
+                            found.push(json::to_jsonresult(&key, &doc)?)
                         }
                     }
                     None => (),
