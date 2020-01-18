@@ -30,7 +30,6 @@ pub struct Store {
     pub data: RwLock<DStoreHashMap>,
 }
 
-
 impl Store {
     pub fn new(data: DStoreHashMap) -> Result<Store> {
         Ok(Store {

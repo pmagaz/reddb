@@ -59,6 +59,7 @@ impl DStore {
         })
     }
 
+    //TODO data to be json
     pub fn insert(&mut self, data: String) -> Value {
         self.store.insert(data).unwrap()
     }
@@ -75,17 +76,7 @@ impl DStore {
         self.store.get().unwrap()
     }
 
-    // pub fn jsondocs_tosave<'a>(&self, store: &'a RwLockReadGuard<DStoreHashMap>) -> Vec<&[u8]> {
-    //     let json_docs: Vec<&[u8]> = store
-    //         .iter()
-    //         .filter(|(_k, v)| v.status == Status::NotSaved)
-    //         .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
-    //         .map(|doc| json::to_jsonstring(&doc))
-    //         //.map(|doc| doc.as_bytes())
-    //         .collect();
-    //     json_docs
-    // }
-
+    //TODO change to write_all
     pub fn persist(&mut self) -> Result<()> {
         let store = self.store.data.read()?;
         let mut file = self.handler.file.lock()?;
