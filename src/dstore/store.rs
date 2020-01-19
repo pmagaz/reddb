@@ -84,11 +84,12 @@ impl Store {
         Ok(result)
     }
 
-    pub fn insert(&mut self, value: String) -> Result<Value> {
+    pub fn insert(&mut self, query: Value) -> Result<Value> {
         let mut store = self.store.write()?;
-        let json_data: Value = serde_json::from_str(&value)?;
+        //serde_json::
+        //let json_data: Value = serde_json::from_str(&value)?;
         let doc = Document {
-            data: json_data,
+            data: query,
             status: Status::NotSaved,
         };
         let _id = Uuid::new_v4();
