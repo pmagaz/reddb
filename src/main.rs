@@ -19,14 +19,22 @@ fn main() {
             }
         }"#;
     let data = doc.to_string();
-    let doc = db.insert(data);
+    let doc = db.insert(data).unwrap();
     let _id = &doc["_id"];
-    let result = db.find_by_id(&_id);
+    let result = db.find_by_id(&_id).unwrap();
     //db.insert(doc);
-    db.insert(r#"{"name":"notsaved1"}"#.to_string());
-    db.insert(r#"{"name":"notsaved2", "leches": "34"}"#.to_string());
-    let result2 = db.find(r#"{"name":"john"}"#.to_string());
-    //println!("FIND {:?}", result2);
+    db.insert(r#"{"name":"notsaved1"}"#.to_string()).unwrap();
+    db.insert(r#"{"name":"notsaved2", "leches": "34"}"#.to_string())
+        .unwrap();
+    let result2 = db.find(r#"{"name":"notsaved1"}"#.to_string()).unwrap();
+    let result3 = db
+        .find(r#"{"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}"#.to_string())
+        .unwrap();
+    println!("FIND {:?}", result2);
+    println!("FIND by id{:?}", result3);
+    let result3 = db
+        .delete(r#"{"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}"#.to_string())
+        .unwrap();
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());
     // db.put(r#"{"id": 1,"data": {}}"#.to_string());

@@ -21,9 +21,9 @@ pub struct Document {
 
 #[derive(Debug)]
 pub struct Store {
-    pub data: RwLock<DStoreHashMap>,
+    pub store: RwLock<DStoreHashMap>,
 }
-
+// FIXME unwraps
 impl Store {
     pub fn new(buf: Lines<&[u8]>) -> Result<Store> {
         println!("[DStore] Parsing database into memory");
@@ -43,12 +43,50 @@ impl Store {
         }
 
         Ok(Self {
-            data: RwLock::new(map_store),
+            store: RwLock::new(map_store),
         })
     }
 
+    pub fn find(&self, data: String) -> Result<Value> {
+        let json_data: Value = serde_json::from_str(&data)?;
+        let object = json_data.as_object().unwrap();
+        let result = match object.get("_id") {
+            Some(_id) => self.find_by_id(&_id)?,
+            None => self.find_by_data(&json_data)?,
+        };
+        Ok(result)
+    }
+
+    pub fn find_by_id(&self, id: &Value) -> Result<Value> {
+        let store = self.store.read()?;
+        let id = id.as_str().unwrap();
+        let _id = Uuid::parse_str(id)?;
+        let doc = store.get(&_id).unwrap();
+        let result = json::to_jsonresult(&_id, &doc)?;
+        Ok(result)
+    }
+
+    pub fn find_by_data(&self, data: &Value) -> Result<Value> {
+        let store = self.store.read()?;
+        let mut found = Vec::new();
+        for (key, doc) in store.iter() {
+            for (prop, value) in data.as_object().unwrap().iter() {
+                match &doc.data.get(prop) {
+                    Some(x) => {
+                        if x == &value {
+                            found.push(json::to_jsonresult(&key, &doc)?)
+                        }
+                    }
+                    None => (),
+                };
+            }
+        }
+        let result = Value::Array(found);
+        Ok(result)
+    }
+
     pub fn insert(&mut self, value: String) -> Result<Value> {
-        let mut store = self.data.write()?;
+        let mut store = self.store.write()?;
         let json_data: Value = serde_json::from_str(&value)?;
         let doc = Document {
             data: json_data,
@@ -60,45 +98,24 @@ impl Store {
         Ok(json_doc)
     }
 
-    pub fn find_by_id(&self, id: &Value) -> Result<Value> {
-        //TODO fix error
-        let store = self.data.read()?;
-        let id = id.as_str().unwrap();
-        let _id = Uuid::parse_str(id)?;
-        let doc = store.get(&_id).unwrap();
-        let result = json::to_jsonresult(&_id, &doc)?;
+    pub fn delete(&self, data: String) -> Result<Value> {
+        let json_data: Value = serde_json::from_str(&data)?;
+        let object = json_data.as_object().unwrap();
+        let result = match object.get("_id") {
+            Some(_id) => self.find_by_id(&_id)?,
+            None => self.find_by_data(&json_data)?,
+        };
         Ok(result)
     }
 
-    pub fn find(&self, data: String) -> Result<Value> {
-        let store = self.data.read()?;
-        let json_data: Value = serde_json::from_str(&data)?;
-        let mut found = Vec::new();
-        for (key, doc) in store.iter() {
-            for (prop, value) in json_data.as_object().unwrap().iter() {
-                match &doc.data.get(prop) {
-                    Some(x) => {
-                        if x == &value {
-                            found.push(json::to_jsonresult(&key, &doc)?)
-                        }
-                    }
-                    None => (),
-                };
-            }
-        }
-        let docs = Value::Array(found);
-        println!("FIND RESULT {:?}", docs);
-        Ok(docs)
-    }
-
     pub fn get(&self) -> Result<()> {
-        let data = self.data.read()?;
+        let data = self.store.read()?;
         println!("STORE DATA{:?}", &data);
         Ok(())
     }
 
     pub fn format_jsondocs<'a>(&self) -> Vec<u8> {
-        let data = self.data.read().unwrap();
+        let data = self.store.read().unwrap();
         let formated_docs: Vec<u8> = data
             .iter()
             .filter(|(_k, v)| v.status == Status::NotSaved)
