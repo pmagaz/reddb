@@ -1,6 +1,7 @@
 use dotenv::dotenv;
 use iron::prelude::*;
 use router::Router;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use dotenv_codegen::dotenv;
@@ -13,52 +14,65 @@ extern crate quick_error;
 fn main() {
     dotenv().ok();
     let mut db = DStore::new(dotenv!("DB_PATH")).unwrap();
-    let doc = r#"
-        {
-            "id": 1,
-            "data": {
-            }
-        }"#;
-    let data = doc.to_string();
-    let doc = db.insert(data).unwrap();
-    let _id = &doc["_id"];
-    let result = db.find_by_id(&_id).unwrap();
-    let insert1 = json!({"name":"notsaved1"});
-    //db.insert(doc);
-    //db.insert(insert1).unwrap();
-    db.insert(r#"{"name":"notsaved2", "leches": "34"}"#.to_string());
-    //.unwrap();
-    let result2 = db.find(r#"{"name":"notsaved1"}"#.to_string()).unwrap();
-    let result3 = db
-        .find(r#"{"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}"#.to_string())
+
+    #[derive(Serialize, Deserialize)]
+    struct Search {
+        name: String,
+    };
+
+    let search = Search {
+        name: "notsaved22".to_owned(),
+    };
+
+    let result = db.find(&json!({"name":"notsaved11"})).unwrap();
+    println!("FIND: name {:?}", result);
+
+    let result = db
+        .find(&json!({"name":"notsaved11", "leches": 45}))
         .unwrap();
-    println!("FIND {:?}", result2);
-    println!("FIND by id{:?}", result3);
-    let result3 = db
-        .delete(r#"{"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}"#.to_string())
+    println!("FIND: name & leches {:?}", result);
+
+    let result = db.find_one(&json!({"name":"notsaved11"})).unwrap();
+    println!("FINDONE: name {:?}", result);
+
+    let result = db
+        .find_one(&json!({"_id":"db66be69-aaf8-4755-9218-f0f519aff61d"}))
         .unwrap();
-    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
-    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
-    // db.put(r#"{"id": 1,"data": {}}"#.to_string());
+    println!("FINDONE_ID: name {:?}", result);
+    // let result3 = db
+    //     .find(&json!({"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}))
+    //     .unwrap();
+    // println!("FIND BY ID {:?}", result3);
+
+    // let result4 = db.insert(json!({"name":"inserted11"})).unwrap();
+    // println!("INSERTED{:?}", result4);
+
+    // let result5 = db
+    //     .update(json!({"name":"inserted11"}), json!({"name":"inserted33"}))
+    //     .unwrap();
+    // println!("UPDATED{:?}", result5);
+    //    let doc1 = json!({"name":"notsaved1"});
+    // let doc = db.insert(doc1).unwrap();
+    // let _id = &doc["_id"];
+    // println!("ID AFTER INSERT {:?}", _id);
     //db.get();
     db.persist();
-    //db.put("key".to_string(), "value".to_string()).persist();
     //println!("DATA {:?}", data);
-    let mut router = Router::new();
-    for handler in handlers::get_handlers() {
-        match handler.method {
-            handlers::Method::Get => {
-                println!("Setting up GET method {}", handler.route);
-                router.get(&handler.route, handler.handler, &handler.route);
-            }
-            handlers::Method::Post => {
-                println!("Setting up POST method {}", handler.route);
-                router.post(&handler.route, handler.handler, &handler.route);
-            }
-        }
-    }
-    let host_addr = dotenv!("HOST_ADDRESS");
+    // let mut router = Router::new();
+    // for handler in handlers::get_handlers() {
+    //     match handler.method {
+    //         handlers::Method::Get => {
+    //             println!("Setting up GET method {}", handler.route);
+    //             router.get(&handler.route, handler.handler, &handler.route);
+    //         }
+    //         handlers::Method::Post => {
+    //             println!("Setting up POST method {}", handler.route);
+    //             router.post(&handler.route, handler.handler, &handler.route);
+    //         }
+    //     }
+    // }
+    // let host_addr = dotenv!("HOST_ADDRESS");
 
-    println!("Server up on http://{}", &host_addr);
-    Iron::new(router).http(&host_addr).unwrap();
+    // println!("Server up on http://{}", &host_addr);
+    // Iron::new(router).http(&host_addr).unwrap();
 }

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum Status {
     Saved,
     Deleted,
+    Updated,
     NotSaved,
 }
 
