@@ -34,16 +34,20 @@ impl DStore {
         })
     }
     //TODO data to be json
-    pub fn insert(&mut self, data: String) -> Value {
-        self.store.insert(data).unwrap()
+    pub fn insert(&mut self, data: String) -> Result<Value> {
+        Ok(self.store.insert(data)?)
     }
 
-    pub fn find_by_id(&self, id: &Value) -> Value {
-        self.store.find_by_id(id).unwrap()
+    pub fn delete(&mut self, data: String) -> Result<Value> {
+        Ok(self.store.delete(data)?)
     }
 
-    pub fn find(&self, data: String) -> Value {
-        self.store.find(data).unwrap()
+    pub fn find_by_id(&self, id: &Value) -> Result<Value> {
+        Ok(self.store.find_by_id(id)?)
+    }
+
+    pub fn find(&self, data: String) -> Result<Value> {
+        Ok(self.store.find(data)?)
     }
 
     pub fn get(&self) {
