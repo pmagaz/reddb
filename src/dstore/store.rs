@@ -2,7 +2,7 @@ use super::error;
 use super::json;
 use super::status::Status;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::io::Lines;
 use std::result;
@@ -47,12 +47,11 @@ impl Store {
         })
     }
 
-    pub fn find(&self, data: String) -> Result<Value> {
-        let json_data: Value = serde_json::from_str(&data)?;
-        let object = json_data.as_object().unwrap();
-        let result = match object.get("_id") {
+    pub fn find(&self, query: String) -> Result<Value> {
+        let query_object: Value = serde_json::from_str(&query)?;
+        let result = match query_object.get("_id") {
             Some(_id) => self.find_by_id(&_id)?,
-            None => self.find_by_data(&json_data)?,
+            None => self.find_by_data(&query_object)?,
         };
         Ok(result)
     }
@@ -66,11 +65,11 @@ impl Store {
         Ok(result)
     }
 
-    pub fn find_by_data(&self, data: &Value) -> Result<Value> {
+    pub fn find_by_data(&self, query_object: &Value) -> Result<Value> {
         let store = self.store.read()?;
         let mut found = Vec::new();
         for (key, doc) in store.iter() {
-            for (prop, value) in data.as_object().unwrap().iter() {
+            for (prop, value) in query_object.as_object().unwrap().iter() {
                 match &doc.data.get(prop) {
                     Some(x) => {
                         if x == &value {
@@ -98,12 +97,11 @@ impl Store {
         Ok(json_doc)
     }
 
-    pub fn delete(&self, data: String) -> Result<Value> {
-        let json_data: Value = serde_json::from_str(&data)?;
-        let object = json_data.as_object().unwrap();
-        let result = match object.get("_id") {
+    pub fn delete(&self, query: String) -> Result<Value> {
+        let query_object: Value = serde_json::from_str(&query)?;
+        let result = match query_object.get("_id") {
             Some(_id) => self.find_by_id(&_id)?,
-            None => self.find_by_data(&json_data)?,
+            None => self.find_by_data(&query_object)?,
         };
         Ok(result)
     }

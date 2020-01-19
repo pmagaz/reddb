@@ -1,6 +1,7 @@
 use dotenv::dotenv;
 use iron::prelude::*;
 use router::Router;
+use serde_json::json;
 
 use dotenv_codegen::dotenv;
 mod dstore;
@@ -22,10 +23,11 @@ fn main() {
     let doc = db.insert(data).unwrap();
     let _id = &doc["_id"];
     let result = db.find_by_id(&_id).unwrap();
+    let insert1 = json!({"name":"notsaved1"});
     //db.insert(doc);
-    db.insert(r#"{"name":"notsaved1"}"#.to_string()).unwrap();
-    db.insert(r#"{"name":"notsaved2", "leches": "34"}"#.to_string())
-        .unwrap();
+    //db.insert(insert1).unwrap();
+    db.insert(r#"{"name":"notsaved2", "leches": "34"}"#.to_string());
+    //.unwrap();
     let result2 = db.find(r#"{"name":"notsaved1"}"#.to_string()).unwrap();
     let result3 = db
         .find(r#"{"_id":"e94ef3e2-6378-4c63-9d3c-f9751754774f"}"#.to_string())
