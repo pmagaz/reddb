@@ -33,7 +33,11 @@ impl DStore {
             handler: handler,
         })
     }
-    //TODO data to be json
+
+    pub fn find(&self, query: &Value) -> Result<Value> {
+        Ok(self.store.find(&query)?)
+    }
+
     pub fn insert(&mut self, query: Value) -> Result<Value> {
         Ok(self.store.insert(query)?)
     }
@@ -42,16 +46,12 @@ impl DStore {
         Ok(self.store.delete(query)?)
     }
 
-    // pub fn find_one(&self, query: &Value) -> Result<Value> {
-    //     Ok(self.store.find_one(query)?)
-    // }
+    pub fn update(&mut self, query: Value, newValue: Value) -> Result<usize> {
+        let documents = self.store.update(query, newValue)?;
+        //let num_documents = documents.as_object().unwrap().len();
+        //self.persist().unwrap();
 
-    pub fn update(&self, query: Value, newValue: Value) -> Result<usize> {
-        Ok(self.store.update(query, newValue)?)
-    }
-
-    pub fn find(&self, query: &Value) -> Result<Value> {
-        Ok(self.store.find(&query)?)
+        Ok(documents)
     }
 
     pub fn persist(&mut self) -> Result<()> {
