@@ -34,6 +34,10 @@ impl DStore {
         })
     }
 
+    pub fn find_id(&self, query: &Value) -> Result<Value> {
+        Ok(self.store.find_id(&query)?)
+    }
+
     pub fn find(&self, query: &Value) -> Result<Value> {
         Ok(self.store.find(&query)?)
     }
@@ -42,16 +46,18 @@ impl DStore {
         Ok(self.store.insert(query)?)
     }
 
-    pub fn delete(&mut self, query: Value) -> Result<Value> {
-        Ok(self.store.delete(query)?)
+    pub fn update(&mut self, query: Value, new_value: Value) -> Result<usize> {
+        let documents = self.store.update(query, new_value)?;
+        Ok(documents.len())
     }
 
-    pub fn update(&mut self, query: Value, newValue: Value) -> Result<usize> {
-        let documents = self.store.update(query, newValue)?;
-        //let num_documents = documents.as_object().unwrap().len();
-        //self.persist().unwrap();
+    pub fn delete(&mut self, query: Value) -> Result<usize> {
+        let documents = self.store.delete(query)?;
+        Ok(documents.len())
+    }
 
-        Ok(documents)
+    pub fn get(&mut self) -> Result<()> {
+        Ok(self.store.get()?)
     }
 
     pub fn persist(&mut self) -> Result<()> {

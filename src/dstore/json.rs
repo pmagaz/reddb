@@ -41,3 +41,12 @@ where
     json_value["data"]["_id"] = Value::String(_id.to_string());
     Ok(json_value["data"].clone())
 }
+
+pub fn to_operationlog<T>(_id: &Uuid, doc: &T) -> JsonResult<Value>
+where
+    T: Serialize,
+{
+    let mut json_value: Value = serde_json::to_value(doc)?;
+    json_value["data"]["_id"] = Value::String(_id.to_string());
+    Ok(json_value["data"].clone())
+}
