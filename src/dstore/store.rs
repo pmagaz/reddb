@@ -98,22 +98,22 @@ impl Store {
     }
 
     //TODO update multiple fields
-    pub fn update(&self, query: Value, newValue: Value) -> Result<usize> {
+    pub fn update(&self, query: Value, new_value: Value) -> Result<usize> {
         let mut store = self.write_store()?;
-        let mut docs_founded = Vec::new();
+        let mut docs_updated = Vec::new();
         let query_map = query.as_object().unwrap();
         for (key, doc) in store.iter_mut() {
-            let mut properties_match: Vec<i32> = Vec::new();
+            //let mut properties_match: Vec<i32> = Vec::new();
             let num_properties = query_map.len();
             for (prop, value) in query_map.iter() {
                 match doc.data.get(prop) {
                     Some(val) => {
                         if val == value {
-                            properties_match.push(1);
-                            *doc.data.get_mut(prop).unwrap() = json!(newValue[prop]);
-                            if num_properties == properties_match.len() {
-                                docs_founded.push(json::to_jsonresult(&key, &doc)?)
-                            }
+                            //properties_match.push(1);
+                            *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
+                            // if num_properties == properties_match.len() {
+                            docs_updated.push(json::to_jsonresult(&key, &doc)?)
+                            //  }
                         }
                     }
                     None => (),
@@ -121,8 +121,10 @@ impl Store {
             }
             doc.status = Status::Updated;
         }
-        let result = docs_founded.len();
-        Ok(result)
+        println!("updateddddd {:?}", self.store);
+
+        //let result = Value::Array(docs_updated);
+        Ok(docs_updated.len())
     }
 
     pub fn insert(&mut self, query: Value) -> Result<Value> {
@@ -153,6 +155,7 @@ impl Store {
 
     pub fn format_jsondocs<'a>(&self) -> Vec<u8> {
         let store = self.read_store().unwrap();
+        println!("STORE DATA{:?}", &store);
         let formated_docs: Vec<u8> = store
             .iter()
             .filter(|(_k, v)| v.status == Status::NotSaved)

@@ -46,6 +46,7 @@ fn main() {
             json!({"name":"updatedname", "leches": 333}),
         )
         .unwrap();
+    println!("UPDATED: {:?}", result);
 
     let result = db
         .find(&json!({"name":"updatedname", "leches": 333}))
