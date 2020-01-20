@@ -42,11 +42,11 @@ impl DStore {
         Ok(self.store.delete(query)?)
     }
 
-    pub fn find_one(&self, query: &Value) -> Result<Value> {
-        Ok(self.store.find_one(query)?)
-    }
+    // pub fn find_one(&self, query: &Value) -> Result<Value> {
+    //     Ok(self.store.find_one(query)?)
+    // }
 
-    pub fn update(&self, query: Value, newValue: Value) -> Result<Value> {
+    pub fn update(&self, query: Value, newValue: Value) -> Result<usize> {
         Ok(self.store.update(query, newValue)?)
     }
 
