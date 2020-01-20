@@ -36,22 +36,30 @@ fn main() {
     println!("FIND: name {:?}", result);
 
     let result = db
-        .find(&json!({"_id":"db66be69-aaf8-4755-9218-f0f519aff61d"}))
+        .find_id(&json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"}))
         .unwrap();
     println!("FINDONE_ID: name {:?}", result);
 
     let result = db
         .update(
-            json!({"name":"notsaved11", "leches": 12}),
-            json!({"name":"updatedname", "leches": 333}),
+            json!({"name":"record2", "leches": 22}),
+            json!({"name":"record22", "leches": 222222}),
         )
         .unwrap();
     println!("UPDATED: {:?}", result);
 
-    let result = db
-        .find(&json!({"name":"updatedname", "leches": 333}))
-        .unwrap();
-    println!("FIND AFTER UPDATE: {:?}", result);
+    let result = db.delete(json!({"name":"record3", "leches": 33})).unwrap();
+    println!("DELETED: {:?}", result);
+
+    let result = db.insert(json!({"name":"record4", "leches": 44})).unwrap();
+    println!("INSERT: name & leches {:?}", result);
+
+    db.get();
+
+    // let result = db
+    //     .find(&json!({"name":"updatedname", "leches": 333}))
+    //     .unwrap();
+    // println!("FIND AFTER UPDATE: {:?}", result);
     //println!("UPDATE NAME: name & leches {:?}", result);
 
     // let result = db
@@ -75,7 +83,7 @@ fn main() {
     // let _id = &doc["_id"];
     // println!("ID AFTER INSERT {:?}", _id);
     //db.get();
-    db.persist();
+    //db.persist();
     // let mut router = Router::new();
     // for handler in handlers::get_handlers() {
     //     match handler.method {

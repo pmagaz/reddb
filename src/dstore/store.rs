@@ -55,24 +55,43 @@ impl Store {
         Ok(self.store.write()?)
     }
 
-    pub fn find(&self, query: &Value) -> Result<Value> {
-        let result = match query.get("_id") {
-            Some(_id) => self.find_id(&_id)?,
-            None => self.find_data(&query)?,
+    pub fn get_id<'a>(&self, query: &'a Value) -> Result<&'a str> {
+        //Fixme
+        let _id = match query.get("_id").unwrap().as_str() {
+            Some(_id) => _id,
+            None => "",
         };
-        Ok(result)
+        Ok(_id)
     }
 
-    pub fn find_id(&self, id: &Value) -> Result<Value> {
+    pub fn get_uuid(&self, query: &Value) -> Result<Uuid> {
+        let _id = self.get_id(query)?;
+        let uuid = Uuid::parse_str(_id)?;
+        Ok(uuid)
+    }
+
+    pub fn insert(&mut self, query: Value) -> Result<Value> {
+        let mut store = self.write_store()?;
+        let doc = Document {
+            data: query,
+            status: Status::NotSaved,
+        };
+        let _id = Uuid::new_v4();
+        let json_doc = json::to_jsondoc(&_id, &doc)?;
+        store.insert(_id, doc);
+        Ok(json_doc)
+    }
+
+    pub fn find_id(&self, query: &Value) -> Result<Value> {
         let store = self.read_store()?;
-        let id = id.as_str().unwrap();
-        let _id = Uuid::parse_str(id)?;
-        let doc = store.get(&_id).unwrap();
-        let result = json::to_jsonresult(&_id, &doc)?;
+        let uuid = self.get_uuid(&query)?;
+        let doc = store.get(&uuid).unwrap();
+        let result = json::to_jsonresult(&uuid, &doc)?;
         Ok(result)
     }
 
-    pub fn find_data(&self, query: &Value) -> Result<Value> {
+    //TODO unify find, update, delete
+    pub fn find(&self, query: &Value) -> Result<Value> {
         let store = self.read_store()?;
         let mut docs_founded = Vec::new();
         let query_map = query.as_object().unwrap();
@@ -97,59 +116,66 @@ impl Store {
         Ok(result)
     }
 
-    //TODO update multiple fields
-    pub fn update(&self, query: Value, new_value: Value) -> Result<usize> {
+    pub fn update(&self, query: Value, new_value: Value) -> Result<Vec<Value>> {
         let mut store = self.write_store()?;
         let mut docs_updated = Vec::new();
         let query_map = query.as_object().unwrap();
         for (key, doc) in store.iter_mut() {
-            //let mut properties_match: Vec<i32> = Vec::new();
+            let mut properties_match: Vec<i32> = Vec::new();
             let num_properties = query_map.len();
             for (prop, value) in query_map.iter() {
-                match doc.data.get(prop) {
+                match &doc.data.get(prop) {
                     Some(val) => {
-                        if val == value {
-                            //properties_match.push(1);
+                        if val == &value {
+                            properties_match.push(1);
                             *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
-                            // if num_properties == properties_match.len() {
-                            docs_updated.push(json::to_jsonresult(&key, &doc)?)
-                            //  }
+                            if num_properties == properties_match.len() {
+                                doc.status = Status::Updated;
+                                docs_updated.push(json::to_operationlog(&key, &doc)?)
+                            }
                         }
                     }
                     None => (),
                 };
             }
-            doc.status = Status::Updated;
         }
-        println!("updateddddd {:?}", self.store);
-
-        //let result = Value::Array(docs_updated);
-        Ok(docs_updated.len())
+        let result = docs_updated;
+        Ok(result)
     }
 
-    pub fn insert(&mut self, query: Value) -> Result<Value> {
+    pub fn delete(&self, query: Value) -> Result<Vec<Value>> {
         let mut store = self.write_store()?;
-        let doc = Document {
-            data: query,
-            status: Status::NotSaved,
-        };
-        let _id = Uuid::new_v4();
-        let json_doc = json::to_jsondoc(&_id, &doc)?;
-        store.insert(_id, doc);
-        Ok(json_doc)
-    }
-
-    pub fn delete(&self, query: Value) -> Result<Value> {
-        let result = match query.get("_id") {
-            Some(_id) => self.find_id(&_id)?,
-            None => self.find_data(&query)?,
-        };
+        let mut docs_updated = Vec::new();
+        let query_map = query.as_object().unwrap();
+        for (key, doc) in store.iter_mut() {
+            let mut properties_match: Vec<i32> = Vec::new();
+            let num_properties = query_map.len();
+            for (prop, value) in query_map.iter() {
+                match &doc.data.get(prop) {
+                    Some(val) => {
+                        if val == &value {
+                            properties_match.push(1);
+                            if num_properties == properties_match.len() {
+                                doc.status = Status::Deleted;
+                                //Continue
+                                //store.remove(&key);
+                                docs_updated.push(json::to_operationlog(&key, &doc)?)
+                            }
+                        }
+                    }
+                    None => (),
+                };
+            }
+        }
+        let result = docs_updated;
         Ok(result)
     }
 
     pub fn get(&self) -> Result<()> {
         let store = self.read_store().unwrap();
-        println!("STORE DATA{:?}", &store);
+        for (key, doc) in store.iter() {
+            println!("STORE DATA{:?}", doc);
+        }
         Ok(())
     }
 
