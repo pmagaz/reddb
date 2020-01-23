@@ -8,29 +8,32 @@ mod handler;
 mod json;
 mod status;
 mod store;
-
 use handler::Handler;
-use store::Store;
+use store::{Document, Store};
+use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, error::DStoreError>;
 
 #[derive(Debug)]
 pub struct DStore {
     store: Store,
-    handler: Handler,
+    db_storage: Handler,
+    opt_storage: Handler,
 }
 
 impl DStore {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore> {
         let mut buf = Vec::new();
-        let handler = Handler::new(path)?;
-        handler.read_content(&mut buf);
+        let db_storage = Handler::new(path)?;
+        let opt_storage = Handler::new(".opt.aof")?;
+        db_storage.read_content(&mut buf);
         let store = Store::new(buf.lines())?;
         println!("[DStore] Ok");
 
         Ok(Self {
             store: store,
-            handler: handler,
+            db_storage: db_storage,
+            opt_storage: opt_storage,
         })
     }
 
@@ -53,7 +56,17 @@ impl DStore {
 
     pub fn delete(&mut self, query: Value) -> Result<usize> {
         let documents = self.store.delete(query)?;
+        self.log_operation(&documents)?;
         Ok(documents.len())
+    }
+
+    pub fn log_operation(&self, documents: &Vec<(Uuid, Document)>) -> Result<()> {
+        let mut opt_storage = self.opt_storage.file.lock()?;
+        let operation_log = self.store.format_operation(documents);
+        opt_storage.seek(SeekFrom::End(0))?;
+        opt_storage.write_all(&operation_log)?;
+        opt_storage.sync_all()?;
+        Ok(())
     }
 
     pub fn get(&mut self) -> Result<()> {
@@ -61,7 +74,7 @@ impl DStore {
     }
 
     pub fn persist(&mut self) -> Result<()> {
-        let mut file = self.handler.file.lock()?;
+        let mut file = self.db_storage.file.lock()?;
         let docs_to_save = self.store.format_jsondocs();
         file.seek(SeekFrom::End(0))?;
         file.write_all(&docs_to_save)?;
