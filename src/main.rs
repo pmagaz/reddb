@@ -1,6 +1,5 @@
 use dotenv::dotenv;
 use iron::prelude::*;
-use router::Router;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

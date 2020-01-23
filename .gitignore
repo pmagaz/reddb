@@ -6,3 +6,4 @@
 wasm-pack.log
 .database
 .database*
+.opt.aof

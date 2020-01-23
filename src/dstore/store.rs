@@ -1,6 +1,7 @@
 use super::error;
 use super::json;
 use super::status::Status;
+use bincode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -15,7 +16,7 @@ pub type DStoreHashMap = HashMap<Uuid, Document>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub data: Value,
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(skip_deserializing)]
     pub status: Status,
 }
 
@@ -124,14 +125,15 @@ impl Store {
             let mut properties_match: Vec<i32> = Vec::new();
             let num_properties = query_map.len();
             for (prop, value) in query_map.iter() {
-                match &doc.data.get(prop) {
+                match doc.data.get(prop) {
                     Some(val) => {
-                        if val == &value {
+                        if val == value {
                             properties_match.push(1);
                             *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
                             if num_properties == properties_match.len() {
                                 doc.status = Status::Updated;
-                                docs_updated.push(json::to_operationlog(&key, &doc)?)
+                                //FIXME it has to be a reference
+                                docs_updated.push(json::to_jsonresult(&key, &doc)?)
                             }
                         }
                     }
@@ -143,23 +145,25 @@ impl Store {
         Ok(result)
     }
 
-    pub fn delete(&self, query: Value) -> Result<Vec<Value>> {
+    pub fn delete(&self, query: Value) -> Result<Vec<(Uuid, Document)>> {
         let mut store = self.write_store()?;
-        let mut docs_updated = Vec::new();
+        let mut docs_deleted: Vec<(Uuid, Document)> = Vec::new();
+
         let query_map = query.as_object().unwrap();
         for (key, doc) in store.iter_mut() {
             let mut properties_match: Vec<i32> = Vec::new();
             let num_properties = query_map.len();
             for (prop, value) in query_map.iter() {
-                match &doc.data.get(prop) {
+                match doc.data.get_mut(prop) {
                     Some(val) => {
-                        if val == &value {
+                        if val == value {
                             properties_match.push(1);
                             if num_properties == properties_match.len() {
                                 doc.status = Status::Deleted;
-                                //Continue
-                                //store.remove(&key);
-                                docs_updated.push(json::to_operationlog(&key, &doc)?)
+                                //FIXME it has to be a reference
+                                //docs_deleted.push(doc.clone());
+                                docs_deleted.push((key.clone(), doc.clone()));
+                                //docs_deleted.push(json::to_jsondoc(&key, &doc)?)
                             }
                         }
                     }
@@ -167,7 +171,7 @@ impl Store {
                 };
             }
         }
-        let result = docs_updated;
+        let result = docs_deleted;
         Ok(result)
     }
 
@@ -179,12 +183,26 @@ impl Store {
         Ok(())
     }
 
-    pub fn format_jsondocs<'a>(&self) -> Vec<u8> {
+    pub fn format_jsondocs(&self) -> Vec<u8> {
         let store = self.read_store().unwrap();
         println!("STORE DATA{:?}", &store);
         let formated_docs: Vec<u8> = store
             .iter()
             .filter(|(_k, v)| v.status == Status::NotSaved)
+            // .map(|doc| json::to_jsondoc(&_id & doc).unwrap())
+            .flat_map(|doc| {
+                let mut doc_vector = json::serialize(&doc).unwrap();
+                doc_vector.extend("\n".as_bytes());
+                doc_vector
+            })
+            .collect();
+        formated_docs
+    }
+
+    pub fn format_operation(&self, documents: &Vec<(Uuid, Document)>) -> Vec<u8> {
+        let formated_docs: Vec<u8> = documents
+            .iter()
+            .filter(|(_id, doc)| doc.status != Status::Saved)
             .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
             .flat_map(|doc| {
                 let mut doc_vector = json::serialize(&doc).unwrap();
