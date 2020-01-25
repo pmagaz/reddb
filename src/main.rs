@@ -45,8 +45,11 @@ fn main() {
         .unwrap();
     println!("UPDATED: {:?}", result);
 
+    let result = db.delete(json!({"name":"record1", "leches": 12})).unwrap();
+    println!("DELETED ONE: {:?}", result);
+
     let result = db.delete(json!({"name":"record3", "leches": 33})).unwrap();
-    println!("DELETED: {:?}", result);
+    println!("DELETED TWO: {:?}", result);
 
     let result = db.insert(json!({"name":"record4", "leches": 44})).unwrap();
     println!("INSERT: name & leches {:?}", result);
