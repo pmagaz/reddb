@@ -1,9 +1,7 @@
 use dotenv::dotenv;
-use iron::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use dotenv_codegen::dotenv;
 mod dstore;
 mod handlers;
 use dstore::DStore;
@@ -12,7 +10,7 @@ extern crate quick_error;
 
 fn main() {
     dotenv().ok();
-    let mut db = DStore::new(dotenv!("DB_PATH")).unwrap();
+    let mut db = DStore::new(".db").unwrap();
 
     #[derive(Serialize, Deserialize)]
     struct Search {
