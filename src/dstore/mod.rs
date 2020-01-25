@@ -50,7 +50,9 @@ impl DStore {
     }
 
     pub fn update(&mut self, query: Value, new_value: Value) -> Result<usize> {
-        let documents = self.store.update(query, new_value)?;
+        let mut store = self.store.write_store()?;
+        let documents = self.store.update(&mut store, query, new_value)?;
+        self.log_operation(&documents)?;
         Ok(documents.len())
     }
 
@@ -63,7 +65,6 @@ impl DStore {
 
     pub fn log_operation(&self, documents: &Vec<(&Uuid, &mut Document)>) -> Result<()> {
         let mut opt_storage = self.opt_storage.file.lock()?;
-        println!("aaaaaaaa{:?}", documents.len());
         let operation_log = self.store.format_operation(documents);
         opt_storage.seek(SeekFrom::End(0))?;
         opt_storage.write_all(&operation_log)?;

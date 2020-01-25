@@ -117,61 +117,63 @@ impl Store {
         Ok(result)
     }
 
-    pub fn update(&self, query: Value, new_value: Value) -> Result<Vec<Value>> {
-        let mut store = self.write_store()?;
-        let mut docs_updated = Vec::new();
-        let query_map = query.as_object().unwrap();
-        for (key, doc) in store.iter_mut() {
-            let mut properties_match: Vec<i32> = Vec::new();
-            let num_properties = query_map.len();
-            for (prop, value) in query_map.iter() {
-                match doc.data.get(prop) {
-                    Some(val) => {
-                        if val == value {
-                            properties_match.push(1);
-                            *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
-                            if num_properties == properties_match.len() {
-                                doc.status = Status::Updated;
-                                //FIXME it has to be a reference
-                                docs_updated.push(json::to_jsonresult(&key, &doc)?)
-                            }
-                        }
-                    }
-                    None => (),
-                };
-            }
-        }
-        let result = docs_updated;
-        Ok(result)
-    }
-
-    pub fn get_tuple<'a>(&self, key: (&'a Uuid, &'a Document)) -> (&'a Uuid, &'a Document) {
-        key
-    }
-
-    pub fn update_doc<'a>(&self, doc: &'a mut Document, status: Status) -> &'a mut Document {
+    pub fn update_status<'a>(&self, doc: &'a mut Document, status: Status) -> &'a mut Document {
         doc.status = status;
         doc
     }
 
-    pub fn delete<'a>(
+    // pub fn find2<'a>(
+    //     &self,
+    //     store: &'a mut RwLockWriteGuard<DStoreHashMap>,
+    //     query: Value,
+    //     new_value: Value,
+    // ) -> Result<Vec<(&'a Uuid, Value)>> {
+    //     let query_map = query.as_object().unwrap();
+    //     let num_properties = query_map.len();
+    //     let result: Vec<(&Uuid, Value)> = store
+    //         .iter_mut()
+    //         .filter(|(_id, doc)| doc.status != Status::Deleted)
+    //         .filter(|(_k, doc)| {
+    //             let mut properties_match: Vec<i32> = Vec::new();
+    //             for (prop, value) in query_map.iter() {
+    //                 match doc.data.get(prop) {
+    //                     Some(val) => {
+    //                         if val == value {
+    //                             properties_match.push(1);
+    //                         }
+    //                     }
+    //                     None => (),
+    //                 };
+    //             }
+    //             num_properties == properties_match.len()
+    //         })
+    //         .map(|(id, doc)| json::to_jsonresult(&id, &doc).unwrap())
+    //         .collect();
+
+    //     Ok(result)
+    // }
+
+    pub fn update<'a>(
         &self,
         store: &'a mut RwLockWriteGuard<DStoreHashMap>,
         query: Value,
+        new_value: Value,
     ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
         let query_map = query.as_object().unwrap();
-        let docs_deleted: Vec<(&Uuid, &mut Document)> = store
+        let num_properties = query_map.len();
+        let docs: Vec<(&Uuid, &mut Document)> = store
             .iter_mut()
+            .filter(|(_id, doc)| doc.status != Status::Deleted)
             .map(|(key, doc)| {
                 let mut properties_match: Vec<i32> = Vec::new();
-                let num_properties = query_map.len();
                 for (prop, value) in query_map.iter() {
                     match doc.data.get(prop) {
                         Some(val) => {
                             if val == value {
                                 properties_match.push(1);
+                                *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
                                 if num_properties == properties_match.len() {
-                                    self.update_doc(doc, Status::Deleted);
+                                    self.update_status(doc, Status::Updated);
                                 }
                             }
                         }
@@ -182,8 +184,40 @@ impl Store {
             })
             .collect();
 
-        let result = docs_deleted;
-        Ok(result)
+        Ok(docs)
+    }
+
+    pub fn delete<'a>(
+        &self,
+        store: &'a mut RwLockWriteGuard<DStoreHashMap>,
+        query: Value,
+    ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
+        let query_map = query.as_object().unwrap();
+        let num_properties = query_map.len();
+        let docs: Vec<(&Uuid, &mut Document)> = store
+            .iter_mut()
+            .filter(|(_id, doc)| doc.status != Status::Deleted)
+            .filter(|(_k, doc)| {
+                let mut properties_match: Vec<i32> = Vec::new();
+                for (prop, value) in query_map.iter() {
+                    match doc.data.get(prop) {
+                        Some(val) => {
+                            if val == value {
+                                properties_match.push(1);
+                            }
+                        }
+                        None => (),
+                    };
+                }
+                num_properties == properties_match.len()
+            })
+            .map(|(key, doc)| {
+                self.update_status(doc, Status::Deleted);
+                (key, doc)
+            })
+            .collect();
+
+        Ok(docs)
     }
 
     pub fn get(&self) -> Result<()> {
