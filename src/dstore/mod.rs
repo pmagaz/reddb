@@ -25,7 +25,7 @@ impl DStore {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<DStore> {
         let mut buf = Vec::new();
         let db_storage = Handler::new(path)?;
-        let opt_storage = Handler::new(".opt.aof")?;
+        let opt_storage = Handler::new(".db.aof")?;
         db_storage.read_content(&mut buf);
         let store = Store::new(buf.lines())?;
         println!("[DStore] Ok");
@@ -55,13 +55,15 @@ impl DStore {
     }
 
     pub fn delete(&mut self, query: Value) -> Result<usize> {
-        let documents = self.store.delete(query)?;
+        let mut store = self.store.write_store()?;
+        let documents = self.store.delete(&mut store, query)?;
         self.log_operation(&documents)?;
         Ok(documents.len())
     }
 
-    pub fn log_operation(&self, documents: &Vec<(Uuid, Document)>) -> Result<()> {
+    pub fn log_operation(&self, documents: &Vec<(&Uuid, &mut Document)>) -> Result<()> {
         let mut opt_storage = self.opt_storage.file.lock()?;
+        println!("aaaaaaaa{:?}", documents.len());
         let operation_log = self.store.format_operation(documents);
         opt_storage.seek(SeekFrom::End(0))?;
         opt_storage.write_all(&operation_log)?;
