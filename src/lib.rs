@@ -1,20 +1,23 @@
 use serde_json::Value;
 use std::io::{BufRead, Seek, SeekFrom, Write};
+use std::mem;
 use std::path::Path;
 use std::result;
 
 #[macro_use]
 extern crate quick_error;
 
+mod document;
 mod error;
 mod json;
 mod query;
 mod status;
 mod storage;
 mod store;
+use document::Document;
 use query::Query;
 use storage::Storage;
-use store::{Document, Store};
+use store::Store;
 use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, error::RedDbError>;
@@ -41,6 +44,27 @@ impl RedDb {
             db_storage: db_storage,
             opt_storage: opt_storage,
         })
+    }
+
+    pub fn format_doc<'a>(&self, doc: &'a Document) -> &'a Document {
+        doc
+    }
+
+    pub fn leches(&self, doc: Value) -> Value {
+        doc
+    }
+
+    pub fn find_id(&mut self, query: Value) -> Result<Value> {
+        let mut store = self.store.to_read()?;
+        let document = self.query.find_id(&mut store, query)?;
+        let (_id, doc) = document;
+        Ok(doc.data.clone())
+    }
+
+    pub fn find(&mut self, query: Value) -> Result<usize> {
+        let mut store = self.store.to_read()?;
+        let documents = self.query.find(&mut store, query)?;
+        Ok(documents.len())
     }
 
     pub fn update(&mut self, query: Value, new_value: Value) -> Result<usize> {
@@ -71,12 +95,12 @@ impl RedDb {
         Ok(())
     }
 
-    pub fn persist(&mut self) -> Result<()> {
-        let mut file = self.db_storage.file.lock()?;
-        let docs_to_save = self.store.format_jsondocs();
-        file.seek(SeekFrom::End(0))?;
-        file.write_all(&docs_to_save)?;
-        file.sync_all()?;
-        Ok(())
-    }
+    // pub fn persist(&mut self) -> Result<()> {
+    //     let mut file = self.db_storage.file.lock()?;
+    //     let docs_to_save = self.store.format_jsondocs();
+    //     file.seek(SeekFrom::End(0))?;
+    //     file.write_all(&docs_to_save)?;
+    //     file.sync_all()?;
+    //     Ok(())
+    // }
 }

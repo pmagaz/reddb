@@ -18,21 +18,19 @@ fn main() {
         name: "notsaved22".to_owned(),
     };
 
-    // let result = db.find(&json!({"name":"notsaved11"})).unwrap();
-    // println!("FIND: name {:?}", result);
+    let result = db.find(json!({"name":"record1"})).unwrap();
+    println!("FIND: name {:?}", result);
 
-    // let result = db
-    //     .find(&json!({"name":"notsaved11", "leches": 45}))
-    //     .unwrap();
-    // println!("FIND: name & leches {:?}", result);
+    let result = db.find(json!({"name":"record2", "leches": 22})).unwrap();
+    println!("FIND: name & leches {:?}", result);
 
-    // let result = db.find(&json!({"name":"notsaved11"})).unwrap();
-    // println!("FIND: name {:?}", result);
-
-    // let result = db
-    //     .find_id(&json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"}))
-    //     .unwrap();
-    // println!("FINDONE_ID: name {:?}", result);
+    let result = db.find(json!({"name":"record2", "leches": 55})).unwrap();
+    println!("FIND: name {:?}", result);
+    let id = json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"});
+    let result = db
+        .find_id(json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"}))
+        .unwrap();
+    println!("FINDONE_ID {:?}", result);
 
     let result = db
         .update(

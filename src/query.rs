@@ -1,10 +1,10 @@
+use super::document::Document;
 use super::error;
 use super::status::Status;
-use super::store::{Document, ReadGuard, RedDbHashMap, WriteGuard};
+use super::store::{ReadGuard, RedDbHashMap, WriteGuard};
 use serde_json::{json, Value};
 use std::result;
 use uuid::Uuid;
-
 pub type Result<T> = result::Result<T, error::RedDbError>;
 
 #[derive(Debug)]
@@ -43,75 +43,50 @@ impl Query {
   //   Ok(json_doc)
   // }
 
-  // pub fn find_id(&self, query: &Value) -> Result<Value> {
-  //   let store = self.to_read()?;
-  //   let uuid = self.get_uuid(&query)?;
-  //   let doc = store.get(&uuid).unwrap();
-  //   let result = json::to_jsonresult(&uuid, &doc)?;
-  //   Ok(result)
-  // }
-
-  //TODO unify find, update, delete
-  // pub fn find(&self, query: &Value) -> Result<Value> {
-  //   let store = self.to_read()?;
-  //   let mut docs_founded = Vec::new();
-  //   let query_map = query.as_object().unwrap();
-  //   for (key, doc) in store.iter() {
-  //     let mut properties_match: Vec<i32> = Vec::new();
-  //     let num_properties = query_map.len();
-  //     for (prop, value) in query_map.iter() {
-  //       match &doc.data.get(prop) {
-  //         Some(val) => {
-  //           if val == &value {
-  //             properties_match.push(1);
-  //             if num_properties == properties_match.len() {
-  //               docs_founded.push(json::to_jsonresult(&key, &doc)?)
-  //             }
-  //           }
-  //         }
-  //         None => (),
-  //       };
-  //     }
-  //   }
-  //   let result = Value::Array(docs_founded);
-  //   Ok(result)
-  // }
-
   pub fn update_status<'a>(&self, doc: &'a mut Document, status: Status) -> &'a mut Document {
     doc.status = status;
     doc
   }
 
-  // pub fn find2<'a>(
-  //     &self,
-  //     store: &'a mut RwLockWriteGuard<RedDbHashMap>,
-  //     query: Value,
-  //     new_value: Value,
-  // ) -> Result<Vec<(&'a Uuid, Value)>> {
-  //     let query_map = query.as_object().unwrap();
-  //     let num_properties = query_map.len();
-  //     let result: Vec<(&Uuid, Value)> = store
-  //         .iter_mut()
-  //         .filter(|(_id, doc)| doc.status != Status::Deleted)
-  //         .filter(|(_k, doc)| {
-  //             let mut properties_match: Vec<i32> = Vec::new();
-  //             for (prop, value) in query_map.iter() {
-  //                 match doc.data.get(prop) {
-  //                     Some(val) => {
-  //                         if val == value {
-  //                             properties_match.push(1);
-  //                         }
-  //                     }
-  //                     None => (),
-  //                 };
-  //             }
-  //             num_properties == properties_match.len()
-  //         })
-  //         .map(|(id, doc)| json::to_jsonresult(&id, &doc).unwrap())
-  //         .collect();
+  pub fn find_id<'a>(
+    &self,
+    store: &'a ReadGuard<RedDbHashMap>,
+    query: Value,
+  ) -> Result<(Uuid, &'a Document)> {
+    let uuid = self.get_uuid(&query)?;
+    let doc = store.get(&uuid).unwrap();
+    Ok((uuid, &*doc))
+  }
 
-  //     Ok(result)
-  // }
+  pub fn find<'a>(
+    &self,
+    store: &'a ReadGuard<RedDbHashMap>,
+    query: Value,
+  ) -> Result<Vec<(&'a Uuid, &'a Document)>> {
+    let query_map = query.as_object().unwrap();
+    let num_properties = query_map.len();
+    let docs: Vec<(&Uuid, &Document)> = store
+      .iter()
+      .filter(|(_id, doc)| doc.status != Status::Deleted)
+      .filter(|(_k, doc)| {
+        let mut properties_match: Vec<i32> = Vec::new();
+        for (prop, value) in query_map.iter() {
+          match doc.data.get(prop) {
+            Some(val) => {
+              if val == value {
+                properties_match.push(1);
+              }
+            }
+            None => (),
+          };
+        }
+        num_properties == properties_match.len()
+      })
+      .map(|(key, doc)| (key, doc))
+      .collect();
+
+    Ok(docs)
+  }
 
   pub fn update<'a>(
     &self,
