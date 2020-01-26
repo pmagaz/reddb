@@ -32,7 +32,7 @@ impl Query {
   }
 
   // pub fn insert(&mut self, query: Value) -> Result<Value> {
-  //   let mut store = self.write_store()?;
+  //   let mut store = self.to_write()?;
   //   let doc = Document {
   //     data: query,
   //     status: Status::NotSaved,
@@ -44,7 +44,7 @@ impl Query {
   // }
 
   // pub fn find_id(&self, query: &Value) -> Result<Value> {
-  //   let store = self.read_store()?;
+  //   let store = self.to_read()?;
   //   let uuid = self.get_uuid(&query)?;
   //   let doc = store.get(&uuid).unwrap();
   //   let result = json::to_jsonresult(&uuid, &doc)?;
@@ -53,7 +53,7 @@ impl Query {
 
   //TODO unify find, update, delete
   // pub fn find(&self, query: &Value) -> Result<Value> {
-  //   let store = self.read_store()?;
+  //   let store = self.to_read()?;
   //   let mut docs_founded = Vec::new();
   //   let query_map = query.as_object().unwrap();
   //   for (key, doc) in store.iter() {
@@ -182,7 +182,7 @@ impl Query {
 }
 
 // pub fn get(&self) -> Result<()> {
-//   let store = self.read_store().unwrap();
+//   let store = self.to_read().unwrap();
 //   for (key, doc) in store.iter() {
 //     println!("STORE DATA{:?}", doc);
 //   }
