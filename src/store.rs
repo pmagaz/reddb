@@ -1,8 +1,8 @@
+use super::document::Document;
 use super::error;
 use super::json;
 use super::status::Status;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::Lines;
 use std::result;
@@ -19,13 +19,6 @@ pub struct Store {
     pub store: RwLock<RedDbHashMap>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Document {
-    pub data: Value,
-    #[serde(skip_deserializing)]
-    pub status: Status,
-}
-
 // FIXME unwraps
 impl Store {
     pub fn new(buf: Lines<&[u8]>) -> Result<Self> {
@@ -33,13 +26,14 @@ impl Store {
         let mut map_store: RedDbHashMap = HashMap::new();
         for (_index, line) in buf.enumerate() {
             let content = &line?;
-            let json_doc = json::from_str(&content)?;
-            let _id = match &json_doc._id.as_str() {
+            let mut json_doc = json::from_str(&content)?;
+            let _id = match &json_doc["_id"].as_str() {
                 Some(_id) => Uuid::parse_str(_id)?,
                 None => panic!("ERR: Wrong Uuid format!"),
             };
+            json_doc["data"]["_id"] = Value::String(_id.to_string());
             let doc = Document {
-                data: json_doc.data,
+                data: json_doc["data"].clone(),
                 status: Status::Saved,
             };
             map_store.insert(_id, doc);
@@ -85,7 +79,7 @@ impl Store {
         let formated_docs: Vec<u8> = documents
             .iter()
             .filter(|(_id, doc)| doc.status != Status::Saved)
-            .map(|(_id, doc)| json::to_jsondoc(&_id, &doc).unwrap())
+            .map(|(_id, doc)| json::to_jsonlog(&_id, &doc).unwrap())
             .flat_map(|doc| {
                 let mut doc_vector = json::serialize(&doc).unwrap();
                 doc_vector.extend("\n".as_bytes());

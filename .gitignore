@@ -10,4 +10,4 @@ wasm-pack.log
 .database*
 /target
 **/*.rs.bk
-Cargo.lock
+*.lock
