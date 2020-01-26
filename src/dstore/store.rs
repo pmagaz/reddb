@@ -1,7 +1,6 @@
 use super::error;
 use super::json;
 use super::status::Status;
-use bincode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
