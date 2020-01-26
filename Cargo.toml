@@ -1,8 +1,16 @@
 [package]
-name = "dstore"
+name = "reddb"
 version = "0.1.0"
 authors = ["pmagaz <magazpablo@gmail.com>"]
 edition = "2018"
+
+[lib]
+name = "reddb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mybin"
+path = "src/main.rs"
 
 [dependencies]
 iron = "0.6.1"
@@ -16,7 +24,3 @@ bincode = "1.2.1"
 serde_json = "1.0.44"
 dotenv_codegen = "0.15.0"
 serde = { version = "1.0", features = ["derive"] }
-
-
-[dependencies.bodyparser]
-git = "https://github.com/iron/body-parser.git"
