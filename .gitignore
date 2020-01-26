@@ -8,3 +8,6 @@ wasm-pack.log
 .db
 .db.*
 .database*
+/target
+**/*.rs.bk
+Cargo.lock
