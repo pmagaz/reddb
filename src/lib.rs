@@ -44,14 +44,14 @@ impl RedDb {
     }
 
     pub fn update(&mut self, query: Value, new_value: Value) -> Result<usize> {
-        let mut store = self.store.write_store()?;
+        let mut store = self.store.to_write()?;
         let documents = self.query.update(&mut store, query, new_value)?;
         self.log_operation(&documents)?;
         Ok(documents.len())
     }
 
     pub fn delete(&mut self, query: Value) -> Result<usize> {
-        let mut store = self.store.write_store()?;
+        let mut store = self.store.to_write()?;
         let documents = self.query.delete(&mut store, query)?;
         self.log_operation(&documents)?;
         Ok(documents.len())

@@ -50,16 +50,16 @@ impl Store {
         })
     }
 
-    pub fn read_store(&self) -> Result<ReadGuard<RedDbHashMap>> {
+    pub fn to_read(&self) -> Result<ReadGuard<RedDbHashMap>> {
         Ok(self.store.read()?)
     }
 
-    pub fn write_store(&self) -> Result<WriteGuard<RedDbHashMap>> {
+    pub fn to_write(&self) -> Result<WriteGuard<RedDbHashMap>> {
         Ok(self.store.write()?)
     }
 
     pub fn flush_store(&self) -> Result<()> {
-        let store = self.read_store().unwrap();
+        let store = self.to_read().unwrap();
         for (_key, doc) in store.iter() {
             println!("STORE RECORD {:?}", doc);
         }
@@ -67,7 +67,7 @@ impl Store {
     }
 
     pub fn format_jsondocs(&self) -> Vec<u8> {
-        let store = self.read_store().unwrap();
+        let store = self.to_read().unwrap();
         println!("STORE DATA{:?}", &store);
         let formated_docs: Vec<u8> = store
             .iter()
