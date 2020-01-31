@@ -1,25 +1,28 @@
-use super::document::Document;
+use super::document::{Document, Leches};
 use super::error;
 use super::json;
 use super::status::Status;
+use crate::json_store::JsonStore;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::io::Lines;
+use std::io::{Error, ErrorKind, Lines};
+use std::marker::Sized;
 use std::result;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+
+use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
 pub type Result<T> = result::Result<T, error::RedDbError>;
-pub type RedDbHashMap = HashMap<Uuid, Document>;
+pub type RedDbHashMap = HashMap<Uuid, Mutex<Document>>;
 pub type WriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
 pub type ReadGuard<'a, T> = RwLockReadGuard<'a, T>;
 
 #[derive(Debug)]
 pub struct Store {
-    pub store: RwLock<RedDbHashMap>,
+    pub store: RwLock<HashMap<Uuid, Mutex<Document>>>,
 }
 
-// FIXME unwraps
 impl Store {
     pub fn new(buf: Lines<&[u8]>) -> Result<Self> {
         println!("[RedDb] Parsing database into memory");
@@ -36,7 +39,7 @@ impl Store {
                 data: json_doc["data"].clone(),
                 status: Status::Saved,
             };
-            map_store.insert(_id, doc);
+            map_store.insert(_id, Mutex::new(doc));
         }
 
         Ok(Self {
@@ -48,23 +51,56 @@ impl Store {
         Ok(self.store.read()?)
     }
 
-    pub fn to_write(&self) -> Result<WriteGuard<RedDbHashMap>> {
+    fn to_write(&self) -> Result<WriteGuard<RedDbHashMap>> {
         Ok(self.store.write()?)
     }
 
-    pub fn flush_store(&self) -> Result<()> {
-        let store = self.to_read().unwrap();
-        for (_key, doc) in store.iter() {
-            println!("STORE RECORD {:?}", doc);
-        }
-        Ok(())
+    fn get_id<'a>(&self, query: &'a Value) -> Result<&'a str> {
+        //Fixme
+        let _id = match query.get("_id").unwrap().as_str() {
+            Some(_id) => _id,
+            None => "",
+        };
+        Ok(_id)
     }
 
+    fn get_uuid(&self, query: &Value) -> Result<Uuid> {
+        let _id = self.get_id(query)?;
+        let uuid = Uuid::parse_str(_id)?;
+        Ok(uuid)
+    }
+
+    pub fn find_id<'a, T>(
+        &self,
+        store: RwLockReadGuard<HashMap<Uuid, Mutex<T>>>,
+        id: &'a Value,
+    ) -> &T {
+        let uuid = self.get_uuid(&id).unwrap();
+        let doc = store
+            .get(&uuid)
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not found"))
+            .unwrap();
+
+        let guard = doc.lock().unwrap();
+        let data = &*guard;
+        &data
+    }
+
+    // pub fn flush_store(&self) -> Result<()> {
+    //     let store = self.to_read::<Document>().unwrap();
+    //     for (_key, doc) in store.iter() {
+    //         println!("STORE RECORD {:?}", doc);
+    //     }
+    //     Ok(())
+    // }
+
+    /*
     pub fn format_jsondocs(&self) -> Vec<u8> {
         let store = self.to_read().unwrap();
         println!("STORE DATA{:?}", &store);
         let formated_docs: Vec<u8> = store
             .iter()
+            .map(|(_k, v)| (_k, v.lock().unwrap()))
             .filter(|(_k, v)| v.status == Status::NotSaved)
             .flat_map(|doc| {
                 let mut doc_vector = json::serialize(&doc).unwrap();
@@ -88,4 +124,5 @@ impl Store {
             .collect();
         formated_docs
     }
+    */
 }

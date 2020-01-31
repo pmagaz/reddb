@@ -1,53 +1,75 @@
-use dotenv::dotenv;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use owning_ref::MutexGuardRef;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::io::{Error, ErrorKind};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard};
 
-extern crate reddb;
-use reddb::RedDb;
+use uuid::Uuid;
+type StoreHashMap<T> = HashMap<Uuid, T>;
+
+#[derive(Debug)]
+pub struct Document {
+  pub data: Value,
+}
+
+pub struct Store<T> {
+  pub store: Arc<Mutex<StoreHashMap<T>>>,
+}
+
+impl<T> Store<T> {
+  pub fn new() -> Self {
+    let mut hm = HashMap::new();
+    let map: Arc<Mutex<StoreHashMap<T>>> = Arc::new(Mutex::new(hm));
+    Self {
+      store: map,
+      //store: RwLock::new(map),
+    }
+  }
+
+  pub fn find_by_id<'a, 'b: 'a, 'c>(
+    &'b self,
+    id: &'c Uuid,
+  ) -> MutexGuardRef<'a, StoreHashMap<T>, T> {
+    // map
+    //   .get(&id)
+    //   .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not found"))
+    let guard = self.store.lock().unwrap();
+    MutexGuardRef::new(guard).map(|mg| {
+      mg.get(id)
+        .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not found"))
+        .unwrap()
+    })
+  }
+
+  // pub fn insert<'a>(&self, key: Uuid, val: T) -> Option<Arc<Mutex<T>>> {
+  //   let mut write = self.store.write().unwrap();
+  //   write.insert(key, val)
+  // }
+
+  // pub fn get_data_for<'ret, 'me: 'ret, 'c>(
+  //   &'me self,
+  //   id: &'c Uuid,
+  // ) -> MutexGuardRef<'ret, StoreHashMap<T>, T> {
+  //   MutexGuardRef::new(self.store.lock().unwrap()).map(|mg| mg.get(id).unwrap())
+  // }
+
+  // pub fn find_one<'a>(&'a self, id: &'a Uuid) -> MutexGuardRef<T> {
+  //   let read = self.store;
+  //   let document = self.find_by_id(&read, &id).unwrap();
+  //   //let guard = document.unwrap().lock().unwrap();
+  //   //MutexGuardRef::new(document.lock().unwrap()).map(|mg| mg.get(i).unwrap())
+
+  //   //.map(|mg| mg.get(i).unwrap())
+  // }
+}
 
 fn main() {
-    dotenv().ok();
-    let mut db = RedDb::new(".db").unwrap();
-
-    #[derive(Serialize, Deserialize)]
-    struct Search {
-        name: String,
-    };
-
-    let search = Search {
-        name: "notsaved22".to_owned(),
-    };
-
-    let result = db.find(json!({"name":"record1"})).unwrap();
-    println!("FIND: name {:?}", result);
-
-    let result = db.find(json!({"name":"record2", "leches": 22})).unwrap();
-    println!("FIND: name & leches {:?}", result);
-
-    let result = db.find(json!({"name":"record2", "leches": 55})).unwrap();
-    println!("FIND: name {:?}", result);
-    let id = json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"});
-    let result = db
-        .find_id(json!({"_id":"e7cdef61-d09d-420a-9a3d-e485c056c6aa"}))
-        .unwrap();
-    println!("FINDONE_ID {:?}", result);
-
-    let result = db
-        .update(
-            json!({"name":"record2", "leches": 22}),
-            json!({"name":"record22", "leches": 222222}),
-        )
-        .unwrap();
-    println!("UPDATED: {:?}", result);
-
-    let result = db.delete(json!({"name":"record1", "leches": 12})).unwrap();
-    println!("DELETED ONE: {:?}", result);
-
-    let result = db.delete(json!({"name":"record3", "leches": 33})).unwrap();
-    println!("DELETED TWO: {:?}", result);
-
-    // let result = db.insert(json!({"name":"record4", "leches": 44})).unwrap();
-    // println!("INSERT: name & leches {:?}", result);
-
-    db.flush_store();
+  let store = Store::<Document>::new();
+  let id = Uuid::new_v4();
+  let doc = Document {
+    data: json!({"name":"Peter"}),
+  };
+  //store.insert(id, doc);
+  let document = store.find_by_id(&id);
+  println!("{:?}", document);
 }

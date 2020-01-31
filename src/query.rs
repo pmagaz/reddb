@@ -48,118 +48,121 @@ impl Query {
     doc
   }
 
-  pub fn find_id<'a>(
-    &self,
-    store: &'a ReadGuard<RedDbHashMap>,
-    query: Value,
-  ) -> Result<(Uuid, &'a Document)> {
-    let uuid = self.get_uuid(&query)?;
-    let doc = store.get(&uuid).unwrap();
-    Ok((uuid, &*doc))
-  }
+  // pub fn find_id<'a>(
+  //   &self,
+  //   store: &'a ReadGuard<RedDbHashMap>,
+  //   query: Value,
+  // ) -> Result<(Uuid, &'a Document)> {
+  //   let uuid = self.get_uuid(&query)?;
+  //   let doc = store.get(&uuid).unwrap();
+  //   let mut data = doc.lock().unwrap();//.unwrap_or_else(handle_mutex_err);
 
-  pub fn find<'a>(
-    &self,
-    store: &'a ReadGuard<RedDbHashMap>,
-    query: Value,
-  ) -> Result<Vec<(&'a Uuid, &'a Document)>> {
-    let query_map = query.as_object().unwrap();
-    let num_properties = query_map.len();
-    let docs: Vec<(&Uuid, &Document)> = store
-      .iter()
-      .filter(|(_id, doc)| doc.status != Status::Deleted)
-      .filter(|(_k, doc)| {
-        let mut properties_match: Vec<i32> = Vec::new();
-        for (prop, value) in query_map.iter() {
-          match doc.data.get(prop) {
-            Some(val) => {
-              if val == value {
-                properties_match.push(1);
-              }
-            }
-            None => (),
-          };
-        }
-        num_properties == properties_match.len()
-      })
-      .map(|(key, doc)| (key, doc))
-      .collect();
-
-    Ok(docs)
-  }
-
-  pub fn update<'a>(
-    &self,
-    store: &'a mut WriteGuard<RedDbHashMap>,
-    query: Value,
-    new_value: Value,
-  ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
-    let query_map = query.as_object().unwrap();
-    let num_properties = query_map.len();
-    let docs: Vec<(&Uuid, &mut Document)> = store
-      .iter_mut()
-      .filter(|(_id, doc)| doc.status != Status::Deleted)
-      .map(|(key, doc)| {
-        let mut properties_match: Vec<i32> = Vec::new();
-        for (prop, value) in query_map.iter() {
-          match doc.data.get(prop) {
-            Some(val) => {
-              if val == value {
-                properties_match.push(1);
-                *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
-                if num_properties == properties_match.len() {
-                  self.update_status(doc, Status::Updated);
+  //   Ok((uuid, &*doc))
+  // }
+  /*
+    pub fn find<'a>(
+      &self,
+      store: &'a ReadGuard<RedDbHashMap>,
+      query: Value,
+    ) -> Result<Vec<(&'a Uuid, &'a Document)>> {
+      let query_map = query.as_object().unwrap();
+      let num_properties = query_map.len();
+      let docs: Vec<(&Uuid, &Document)> = store
+        .iter()
+        .filter(|(_id, doc)| doc.status != Status::Deleted)
+        .filter(|(_k, doc)| {
+          let mut properties_match: Vec<i32> = Vec::new();
+          for (prop, value) in query_map.iter() {
+            match doc.data.get(prop) {
+              Some(val) => {
+                if val == value {
+                  properties_match.push(1);
                 }
               }
-            }
-            None => (),
-          };
-        }
-        (key, doc)
-      })
-      .collect();
+              None => (),
+            };
+          }
+          num_properties == properties_match.len()
+        })
+        .map(|(key, doc)| (key, doc))
+        .collect();
 
-    Ok(docs)
-  }
+      Ok(docs)
+    }
 
-  pub fn delete<'a>(
-    &self,
-    store: &'a mut WriteGuard<RedDbHashMap>,
-    query: Value,
-  ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
-    let query_map = query.as_object().unwrap();
-    let num_properties = query_map.len();
-    let docs: Vec<(&Uuid, &mut Document)> = store
-      .iter_mut()
-      .filter(|(_id, doc)| doc.status != Status::Deleted)
-      .filter(|(_k, doc)| {
-        let mut properties_match: Vec<i32> = Vec::new();
-        for (prop, value) in query_map.iter() {
-          match doc.data.get(prop) {
-            Some(val) => {
-              if val == value {
-                properties_match.push(1);
+    pub fn update<'a>(
+      &self,
+      store: &'a mut WriteGuard<RedDbHashMap>,
+      query: Value,
+      new_value: Value,
+    ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
+      let query_map = query.as_object().unwrap();
+      let num_properties = query_map.len();
+      let docs: Vec<(&Uuid, &mut Document)> = store
+        .iter_mut()
+        .filter(|(_id, doc)| doc.status != Status::Deleted)
+        .map(|(key, doc)| {
+          let mut properties_match: Vec<i32> = Vec::new();
+          for (prop, value) in query_map.iter() {
+            match doc.data.get(prop) {
+              Some(val) => {
+                if val == value {
+                  properties_match.push(1);
+                  *doc.data.get_mut(prop).unwrap() = json!(new_value[prop]);
+                  if num_properties == properties_match.len() {
+                    self.update_status(doc, Status::Updated);
+                  }
+                }
               }
-            }
-            None => (),
-          };
-        }
-        num_properties == properties_match.len()
-      })
-      .map(|(key, doc)| {
-        self.update_status(doc, Status::Deleted);
-        (key, doc)
-      })
-      .collect();
+              None => (),
+            };
+          }
+          (key, doc)
+        })
+        .collect();
 
-    Ok(docs)
-  }
+      Ok(docs)
+    }
+
+    pub fn delete<'a>(
+      &self,
+      store: &'a mut WriteGuard<RedDbHashMap>,
+      query: Value,
+    ) -> Result<Vec<(&'a Uuid, &'a mut Document)>> {
+      let query_map = query.as_object().unwrap();
+      let num_properties = query_map.len();
+      let docs: Vec<(&Uuid, &mut Document)> = store
+        .iter_mut()
+        .filter(|(_id, doc)| doc.status != Status::Deleted)
+        .filter(|(_k, doc)| {
+          let mut properties_match: Vec<i32> = Vec::new();
+          for (prop, value) in query_map.iter() {
+            match doc.data.get(prop) {
+              Some(val) => {
+                if val == value {
+                  properties_match.push(1);
+                }
+              }
+              None => (),
+            };
+          }
+          num_properties == properties_match.len()
+        })
+        .map(|(key, doc)| {
+          self.update_status(doc, Status::Deleted);
+          (key, doc)
+        })
+        .collect();
+
+      Ok(docs)
+    }
+  }*/
+
+  // pub fn get(&self) -> Result<()> {
+  //   let store = self.to_read().unwrap();
+  //   for (key, doc) in store.iter() {
+  //     println!("STORE DATA{:?}", doc);
+  //   }
+  //   Ok(())
+  // }
 }
-
-// pub fn get(&self) -> Result<()> {
-//   let store = self.to_read().unwrap();
-//   for (key, doc) in store.iter() {
-//     println!("STORE DATA{:?}", doc);
-//   }
-//   Ok(())
-// }
