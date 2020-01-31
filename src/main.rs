@@ -13,7 +13,7 @@ pub struct Document {
 }
 
 pub struct Store<T> {
-  pub store: Arc<Mutex<StoreHashMap<T>>>,
+  pub store: RwLock<Arc<Mutex<StoreHashMap<T>>>>,
 }
 
 impl<T> Store<T> {
@@ -21,19 +21,17 @@ impl<T> Store<T> {
     let mut hm = HashMap::new();
     let map: Arc<Mutex<StoreHashMap<T>>> = Arc::new(Mutex::new(hm));
     Self {
-      store: map,
-      //store: RwLock::new(map),
+      //store: map,
+      store: RwLock::new(map),
     }
   }
 
-  pub fn find_by_id<'a, 'b: 'a, 'c>(
+  pub fn find_by_id<'a, 'b, 'c>(
     &'b self,
+    map: &'a RwLockReadGuard<Arc<Mutex<StoreHashMap<T>>>>,
     id: &'c Uuid,
   ) -> MutexGuardRef<'a, StoreHashMap<T>, T> {
-    // map
-    //   .get(&id)
-    //   .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not found"))
-    let guard = self.store.lock().unwrap();
+    let guard = map.lock().unwrap();
     MutexGuardRef::new(guard).map(|mg| {
       mg.get(id)
         .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not found"))
@@ -41,25 +39,15 @@ impl<T> Store<T> {
     })
   }
 
+  pub fn find_one<'a, 'b, 'c>(&'b self, id: &'c Uuid) -> MutexGuardRef<'a, StoreHashMap<T>, T> {
+    let read = self.store.read().unwrap();
+    let document = self.find_by_id(&read, &id);
+    document
+  }
+
   // pub fn insert<'a>(&self, key: Uuid, val: T) -> Option<Arc<Mutex<T>>> {
   //   let mut write = self.store.write().unwrap();
   //   write.insert(key, val)
-  // }
-
-  // pub fn get_data_for<'ret, 'me: 'ret, 'c>(
-  //   &'me self,
-  //   id: &'c Uuid,
-  // ) -> MutexGuardRef<'ret, StoreHashMap<T>, T> {
-  //   MutexGuardRef::new(self.store.lock().unwrap()).map(|mg| mg.get(id).unwrap())
-  // }
-
-  // pub fn find_one<'a>(&'a self, id: &'a Uuid) -> MutexGuardRef<T> {
-  //   let read = self.store;
-  //   let document = self.find_by_id(&read, &id).unwrap();
-  //   //let guard = document.unwrap().lock().unwrap();
-  //   //MutexGuardRef::new(document.lock().unwrap()).map(|mg| mg.get(i).unwrap())
-
-  //   //.map(|mg| mg.get(i).unwrap())
   // }
 }
 
@@ -70,6 +58,6 @@ fn main() {
     data: json!({"name":"Peter"}),
   };
   //store.insert(id, doc);
-  let document = store.find_by_id(&id);
+  let document = store.find_one(&id);
   println!("{:?}", document);
 }
