@@ -43,7 +43,7 @@ impl<T> Store<T> {
     //pub fn find_one<'a, 'b: 'a, 'c>(&'b self, id: &'c Uuid) -> Result<()> {
     let store = self.store.read().unwrap();
     let document = self.find_by_id(&store, &id);
-    document.clone()
+    *document.clone()
   }
 }
 
