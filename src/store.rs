@@ -1,91 +1,54 @@
-use super::document::Document;
-use super::error;
-use super::json;
-use super::status::Status;
-use serde_json::{json, Value};
+use super::record::{Document, Record};
 use std::collections::HashMap;
-use std::io::Lines;
-use std::result;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
-pub type Result<T> = result::Result<T, error::RedDbError>;
-pub type RedDbHashMap = HashMap<Uuid, Document>;
-pub type WriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
-pub type ReadGuard<'a, T> = RwLockReadGuard<'a, T>;
+pub type RDHM<T> = HashMap<Uuid, Mutex<Record<T>>>;
+pub type Read<'a, T> = RwLockReadGuard<'a, RDHM<T>>;
+pub type Write<'a, T> = RwLockWriteGuard<'a, RDHM<T>>;
 
-#[derive(Debug)]
-pub struct Store {
-    pub store: RwLock<RedDbHashMap>,
+pub struct Store<T> {
+  pub data: RwLock<RDHM<T>>,
 }
 
-// FIXME unwraps
-impl Store {
-    pub fn new(buf: Lines<&[u8]>) -> Result<Self> {
-        println!("[RedDb] Parsing database into memory");
-        let mut map_store: RedDbHashMap = HashMap::new();
-        for (_index, line) in buf.enumerate() {
-            let content = &line?;
-            let mut json_doc = json::from_str(&content)?;
-            let _id = match &json_doc["_id"].as_str() {
-                Some(_id) => Uuid::parse_str(_id)?,
-                None => panic!("ERR: Wrong Uuid format!"),
-            };
-            json_doc["data"]["_id"] = Value::String(_id.to_string());
-            let doc = Document {
-                data: json_doc["data"].clone(),
-                status: Status::Saved,
-            };
-            map_store.insert(_id, doc);
-        }
-
-        Ok(Self {
-            store: RwLock::new(map_store),
-        })
+impl<T> Store<T> {
+  pub fn new() -> Self {
+    let hm = HashMap::new();
+    Self {
+      data: RwLock::new(hm),
     }
+  }
 
-    pub fn to_read(&self) -> Result<ReadGuard<RedDbHashMap>> {
-        Ok(self.store.read()?)
-    }
+  pub fn to_read(&self) -> RwLockReadGuard<RDHM<T>> {
+    let read = self.data.read().unwrap();
+    read
+  }
 
-    pub fn to_write(&self) -> Result<WriteGuard<RedDbHashMap>> {
-        Ok(self.store.write()?)
-    }
+  pub fn to_write(&self) -> RwLockWriteGuard<RDHM<T>> {
+    let write = self.data.write().unwrap();
+    write
+  }
 
-    pub fn flush_store(&self) -> Result<()> {
-        let store = self.to_read().unwrap();
-        for (_key, doc) in store.iter() {
-            println!("STORE RECORD {:?}", doc);
-        }
-        Ok(())
-    }
+  // pub fn insert(&self, value: T) -> Uuid {
+  //   let mut store = self.to_write();
+  //   let id = Uuid::new_v4();
+  //   let doc = Mutex::new(Record {
+  //     _id: id,
+  //     data: value,
+  //   });
+  //   let _result = store.insert(id, doc);
+  //   id
+  // }
 
-    pub fn format_jsondocs(&self) -> Vec<u8> {
-        let store = self.to_read().unwrap();
-        println!("STORE DATA{:?}", &store);
-        let formated_docs: Vec<u8> = store
-            .iter()
-            .filter(|(_k, v)| v.status == Status::NotSaved)
-            .flat_map(|doc| {
-                let mut doc_vector = json::serialize(&doc).unwrap();
-                doc_vector.extend("\n".as_bytes());
-                doc_vector
-            })
-            .collect();
-        formated_docs
-    }
+  // pub fn find_by_id<'a>(
+  //   &'a self,
+  //   // data: &'a RwLockReadGuard<RDHM<Record<T>>>,
+  //   id: &'a Uuid,
+  // ) -> MutexGuard<Record<T>> {
+  //   let mut store = self.to_read();
 
-    pub fn format_operation(&self, documents: &Vec<(&Uuid, &mut Document)>) -> Vec<u8> {
-        let formated_docs: Vec<u8> = documents
-            .iter()
-            .filter(|(_id, doc)| doc.status != Status::Saved)
-            .map(|(_id, doc)| json::to_jsonlog(&_id, &doc).unwrap())
-            .flat_map(|doc| {
-                let mut doc_vector = json::serialize(&doc).unwrap();
-                doc_vector.extend("\n".as_bytes());
-                doc_vector
-            })
-            .collect();
-        formated_docs
-    }
+  //   let value = store.get(&id).unwrap();
+  //   let guard = value.lock().unwrap();
+  //   guard
+  // }
 }

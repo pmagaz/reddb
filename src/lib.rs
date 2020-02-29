@@ -1,106 +1,44 @@
-use serde_json::Value;
-use std::io::{BufRead, Seek, SeekFrom, Write};
-use std::mem;
-use std::path::Path;
-use std::result;
-
-#[macro_use]
-extern crate quick_error;
-
-mod document;
-mod error;
-mod json;
-mod query;
-mod status;
-mod storage;
-mod store;
-use document::Document;
-use query::Query;
-use storage::Storage;
-use store::Store;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
-pub type Result<T> = result::Result<T, error::RedDbError>;
-
-#[derive(Debug)]
-pub struct RedDb {
-    store: Store,
-    query: Query,
-    db_storage: Storage,
-    opt_storage: Storage,
+mod record;
+mod store;
+mod store_handler;
+use record::Document;
+use store::Store;
+mod storage;
+use storage::Storage;
+use store_handler::{find_by_id, insert};
+pub struct RedDb<T> {
+  pub store: Store<T>,
+  //pub storage: Storage,
 }
 
-impl RedDb {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let mut buf = Vec::new();
-        let db_storage = Storage::new(path)?;
-        let opt_storage = Storage::new(".db.aof")?;
-        db_storage.read_content(&mut buf);
-        println!("[RedDb] Ok");
-
-        Ok(Self {
-            query: Query::new()?,
-            store: Store::new(buf.lines())?,
-            db_storage: db_storage,
-            opt_storage: opt_storage,
-        })
+impl<T> RedDb<T>
+where
+  T: Clone,
+{
+  pub fn new() -> Self {
+    Self {
+      store: Store::<T>::new(),
     }
+  }
 
-    pub fn format_doc<'a>(&self, doc: &'a Document) -> &'a Document {
-        doc
-    }
+  pub fn insert(&self, value: T) -> Uuid {
+    let mut store = self.store.to_write();
+    insert::<T>(&mut store, value)
+  }
 
-    pub fn leches(&self, doc: Value) -> Value {
-        doc
-    }
+  // pub fn leches<'a>(&'a self, doc: &'a MutexGuard<Record<T>>) -> &'a MutexGuard<Record<T>> {
+  //   doc
+  // }
 
-    pub fn find_id(&mut self, query: Value) -> Result<Value> {
-        let mut store = self.store.to_read()?;
-        let document = self.query.find_id(&mut store, query)?;
-        let (_id, doc) = document;
-        Ok(doc.data.clone())
-    }
-
-    pub fn find(&mut self, query: Value) -> Result<usize> {
-        let mut store = self.store.to_read()?;
-        let documents = self.query.find(&mut store, query)?;
-        Ok(documents.len())
-    }
-
-    pub fn update(&mut self, query: Value, new_value: Value) -> Result<usize> {
-        let mut store = self.store.to_write()?;
-        let documents = self.query.update(&mut store, query, new_value)?;
-        self.log_operation(&documents)?;
-        Ok(documents.len())
-    }
-
-    pub fn delete(&mut self, query: Value) -> Result<usize> {
-        let mut store = self.store.to_write()?;
-        let documents = self.query.delete(&mut store, query)?;
-        self.log_operation(&documents)?;
-        Ok(documents.len())
-    }
-
-    pub fn flush_store(&self) -> Result<()> {
-        self.store.flush_store()?;
-        Ok(())
-    }
-
-    pub fn log_operation(&self, documents: &Vec<(&Uuid, &mut Document)>) -> Result<()> {
-        let mut opt_storage = self.opt_storage.file.lock()?;
-        let operation_log = self.store.format_operation(documents);
-        opt_storage.seek(SeekFrom::End(0))?;
-        opt_storage.write_all(&operation_log)?;
-        opt_storage.sync_all()?;
-        Ok(())
-    }
-
-    // pub fn persist(&mut self) -> Result<()> {
-    //     let mut file = self.db_storage.file.lock()?;
-    //     let docs_to_save = self.store.format_jsondocs();
-    //     file.seek(SeekFrom::End(0))?;
-    //     file.write_all(&docs_to_save)?;
-    //     file.sync_all()?;
-    //     Ok(())
-    // }
+  pub fn find_one(&self, id: &Uuid) -> T {
+    let store = self.store.to_read();
+    let result = find_by_id::<T>(&store, &id);
+    //self.leches(&result);
+    let data = result.get_data();
+    data.clone()
+  }
 }
