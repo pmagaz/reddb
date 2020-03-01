@@ -9,9 +9,9 @@ fn main() {
   let result = json_db.find_one(&id);
   println!("{:?}", result);
 
-  // let json_db = RedDb::<ron::Value>::new();
-  // let ron_doc = ron::de::from_str("Game: true").unwrap();
-  // let id = json_db.insert(ron_doc);
-  // let result = json_db.find_one(&id);
-  // println!("{:?}", result);
+  let ron_db = RedDb::<ron::Value>::new();
+  let ron_doc = ron::de::from_str("Game").unwrap();
+  let id = ron_db.insert(ron_doc);
+  let result = ron_db.find_one(&id);
+  println!("{:?}", result);
 }
