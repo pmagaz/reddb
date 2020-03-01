@@ -1,9 +1,9 @@
-use super::record::{Document, Record};
+use super::record::{Record, RedDbRecord};
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
-pub type RDHM<T> = HashMap<Uuid, Mutex<Record<T>>>;
+pub type RDHM<T> = HashMap<Uuid, Mutex<RedDbRecord<T>>>;
 pub type Read<'a, T> = RwLockReadGuard<'a, RDHM<T>>;
 pub type Write<'a, T> = RwLockWriteGuard<'a, RDHM<T>>;
 
@@ -28,27 +28,4 @@ impl<T> Store<T> {
     let write = self.data.write().unwrap();
     write
   }
-
-  // pub fn insert(&self, value: T) -> Uuid {
-  //   let mut store = self.to_write();
-  //   let id = Uuid::new_v4();
-  //   let doc = Mutex::new(Record {
-  //     _id: id,
-  //     data: value,
-  //   });
-  //   let _result = store.insert(id, doc);
-  //   id
-  // }
-
-  // pub fn find_by_id<'a>(
-  //   &'a self,
-  //   // data: &'a RwLockReadGuard<RDHM<Record<T>>>,
-  //   id: &'a Uuid,
-  // ) -> MutexGuard<Record<T>> {
-  //   let mut store = self.to_read();
-
-  //   let value = store.get(&id).unwrap();
-  //   let guard = value.lock().unwrap();
-  //   guard
-  // }
 }

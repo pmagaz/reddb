@@ -1,21 +1,48 @@
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
-pub struct Record<T> {
+use super::status::Status;
+
+pub trait Record<T>: Clone {
+  fn get_id(&self) -> &Uuid;
+  fn get_data(&self) -> &T;
+  fn as_u8(&self) -> Vec<u8>;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedDbRecord<T> {
   pub _id: Uuid,
   pub data: T,
+  pub status: Status,
 }
 
-pub trait Document<T>: Clone {
-  fn get_data(&self) -> &T;
-  // fn get_vec(&self) -> &T;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRecord {
+  pub _id: Uuid,
+  pub data: serde_json::Value,
+  pub status: Status,
 }
 
-impl<T> Document<T> for Record<T>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RonRecord {
+  pub _id: Uuid,
+  pub data: ron::Value,
+  pub status: Status,
+}
+
+impl<T> Record<T> for RedDbRecord<T>
 where
-  T: Clone,
+  T: Clone + Serialize,
 {
+  fn get_id(&self) -> &Uuid {
+    &self._id
+  }
   fn get_data(&self) -> &T {
     &self.data
+  }
+  fn as_u8(&self) -> Vec<u8> {
+    let mut vector = serde_json::to_vec(&self).unwrap();
+    vector.extend("\n".as_bytes());
+    vector
   }
 }
