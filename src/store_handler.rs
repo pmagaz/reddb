@@ -5,18 +5,16 @@ use super::store::{Read, Write};
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
-pub fn insert<T>(store: &mut Write<T>, value: T) -> Uuid {
-  let id = Uuid::new_v4();
-  let doc = Mutex::new(RedDbRecord {
-    _id: id,
-    data: value,
-    status: Status::NotSaved,
-  });
-  let _result = store.insert(id, doc);
-  id
+pub fn insert<T, R>(store: &mut Write<R>, record: R) -> Uuid
+where
+  R: Record<T>,
+{
+  let _id = **&record.get_id();
+  let _result = store.insert(_id, Mutex::new(record));
+  _id
 }
 
-pub fn find_by_id<'a, T>(store: &'a Read<T>, id: &'a Uuid) -> MutexGuard<'a, RedDbRecord<T>> {
+pub fn find_key<'a, T>(store: &'a Read<T>, id: &'a Uuid) -> MutexGuard<'a, T> {
   let value = store.get(&id).unwrap();
   let guard = value.lock().unwrap();
   guard

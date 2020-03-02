@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
-pub type RDHM<T> = HashMap<Uuid, Mutex<RedDbRecord<T>>>;
+pub type RDHM<T> = HashMap<Uuid, Mutex<T>>;
 pub type Read<'a, T> = RwLockReadGuard<'a, RDHM<T>>;
 pub type Write<'a, T> = RwLockWriteGuard<'a, RDHM<T>>;
 
