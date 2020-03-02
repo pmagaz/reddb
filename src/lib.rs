@@ -23,7 +23,7 @@ where
   pub fn new() -> Self {
     Self {
       store: Store::<T>::new(),
-      storage: Storage::new(".db2").unwrap(),
+      storage: Storage::new(".db").unwrap(),
     }
   }
 
