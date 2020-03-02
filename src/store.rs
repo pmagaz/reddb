@@ -6,6 +6,7 @@ pub type RDHM<T> = HashMap<Uuid, Mutex<T>>;
 pub type Read<'a, T> = RwLockReadGuard<'a, RDHM<T>>;
 pub type Write<'a, T> = RwLockWriteGuard<'a, RDHM<T>>;
 
+#[derive(Debug)]
 pub struct Store<T> {
   pub data: RwLock<RDHM<T>>,
 }
