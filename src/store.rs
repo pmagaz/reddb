@@ -1,6 +1,5 @@
-use super::record::{Record, RedDbRecord};
 use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
 pub type RDHM<T> = HashMap<Uuid, Mutex<T>>;

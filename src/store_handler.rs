@@ -1,16 +1,16 @@
-use super::record::{Record, RedDbRecord};
+use super::document::{Doc, Document};
 use super::status::Status;
 use super::store::{Read, Write};
 
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
-pub fn insert<T, R>(store: &mut Write<R>, record: R) -> Uuid
+pub fn insert<L, T>(store: &mut Write<T>, doc: T) -> Uuid
 where
-  R: Record<T>,
+  T: Doc<L>,
 {
-  let _id = **&record.get_id();
-  let _result = store.insert(_id, Mutex::new(record));
+  let _id = **&doc.get_id();
+  let _result = store.insert(_id, Mutex::new(doc));
   _id
 }
 
