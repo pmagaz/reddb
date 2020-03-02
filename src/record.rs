@@ -4,6 +4,7 @@ use uuid::Uuid;
 use super::status::Status;
 
 pub trait Record<T>: Clone {
+  fn new(id: Uuid, value: T, status: Status) -> Self;
   fn get_id(&self) -> &Uuid;
   fn get_data(&self) -> &T;
   fn as_u8(&self) -> Vec<u8>;
@@ -34,6 +35,13 @@ impl<T> Record<T> for RedDbRecord<T>
 where
   T: Clone + Serialize,
 {
+  fn new(id: Uuid, value: T, status: Status) -> Self {
+    Self {
+      _id: id,
+      data: value,
+      status: status,
+    }
+  }
   fn get_id(&self) -> &Uuid {
     &self._id
   }
