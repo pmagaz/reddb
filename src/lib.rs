@@ -7,19 +7,22 @@ use document::{Doc, Document};
 use store::Store;
 mod status;
 mod storage;
+use status::Status;
+use std::fmt::Debug;
 use storage::Storage;
-use store_handler::{find_key, insert};
+use store_handler::{find_key, find_value, insert};
 
 pub type ReadJson<T> = RedDb<Document<T>>;
 
+#[derive(Debug)]
 pub struct RedDb<T> {
   pub store: Store<Document<T>>,
   pub storage: Storage,
 }
 
-impl<T> RedDb<T>
+impl<'a, T> RedDb<T>
 where
-  T: Clone + Serialize,
+  T: Clone + Serialize + Deserialize<'a> + Debug,
 {
   pub fn new() -> Self {
     Self {
@@ -31,8 +34,9 @@ where
   pub fn insert(&self, value: T) -> Uuid {
     let mut store = self.store.to_write();
     let id = Uuid::new_v4();
-    let doc = Document::new(id, value, status::Status::NotSaved);
-    insert::<T, Document<T>>(&mut store, doc)
+    let doc = Document::new(id, value, Status::NotSaved);
+    let result = insert::<T, Document<T>>(&mut store, doc);
+    result
   }
 
   pub fn find_one(&self, id: &Uuid) -> T {
@@ -40,5 +44,12 @@ where
     let result = find_key::<Document<T>>(&store, &id);
     self.storage.write(&result.as_u8());
     result.get_data().clone()
+  }
+
+  pub fn find(&self, value: T) -> usize {
+    let store = self.store.to_read();
+    let result = find_value::<T, Document<T>>(&store, value);
+
+    11
   }
 }
