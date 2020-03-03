@@ -1,4 +1,4 @@
-use super::document::{Doc, Document};
+use super::document::Doc;
 use super::status::Status;
 use super::store::{Read, Write};
 
@@ -16,8 +16,8 @@ where
 
 pub fn find_key<'a, T>(store: &'a Read<T>, id: &'a Uuid) -> MutexGuard<'a, T> {
   let value = store.get(&id).unwrap();
-  let guard = value.lock().unwrap();
-  guard
+  let doc_guard = value.lock().unwrap();
+  doc_guard
 }
 
 pub fn find_value<'a, T, D>(store: &'a Read<D>, value: T) -> Vec<D>
@@ -28,13 +28,9 @@ where
     .iter()
     .map(|(_id, doc)| doc.lock().unwrap())
     .filter(|doc| doc.get_status() != &Status::Deleted)
-    .map(|doc| {
-      //println!("{:?} VALUE", doc);
-      doc.find_values(&value).to_owned()
-    })
+    .filter(|doc| doc.find_in_values(&value))
+    .map(|doc| doc.to_owned())
     .collect();
 
   docs
-  //.filter(|(_id, doc)| doc.status != Status::Deleted)
-  // .collect();
 }
