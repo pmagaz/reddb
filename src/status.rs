@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Deserialize)]
 pub enum Status {
-    Saved,
+    Created,
     Deleted,
     Updated,
     NotSaved,
@@ -10,6 +10,6 @@ pub enum Status {
 
 impl Default for Status {
     fn default() -> Self {
-        Status::Saved
+        Status::Created
     }
 }

@@ -34,7 +34,7 @@ where
   pub fn insert(&self, value: T) -> Uuid {
     let mut store = self.store.to_write();
     let id = Uuid::new_v4();
-    let doc = Document::new(id, value, Status::NotSaved);
+    let doc = Document::new(id, value);
     let result = insert::<T, Document<T>>(&mut store, doc);
     result
   }
@@ -49,8 +49,6 @@ where
   pub fn find(&self, value: T) -> Vec<Document<T>> {
     let store = self.store.to_read();
     let docs = find_value::<T, Document<T>>(&store, value);
-    //self.storage.write(&doc.as_u8());
     docs
-    //11
   }
 }
