@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Serializer, Value};
 use std::convert::From;
 use std::fmt::Debug;
 use uuid::Uuid;
@@ -12,7 +12,8 @@ pub trait Doc<T>: Clone + Sized + Debug {
   fn get_data(&self) -> &T;
   fn get_status(&self) -> &Status;
   fn as_u8(&self) -> Vec<u8>;
-  fn find_values(&self, value: &T) -> &Self;
+  fn data_as_value(&self) -> Value;
+  fn find_in_values(&self, value: &T) -> bool;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,19 +40,28 @@ where
   fn get_status(&self) -> &Status {
     &self.status
   }
+  fn data_as_value(&self) -> Value {
+    serde_json::to_value(&self.get_data()).unwrap()
+  }
   fn get_data(&self) -> &T {
     &self.data
   }
-  fn find_values(&self, value: &T) -> &Self {
-    println!("{:?} VALUEEEEE", value);
-    //let leches = value as Value;
-    //serde_json::from(value);
-    // /serde_json::from_
-    //serde_json::Serializer::new(writer: W)
-    //value.serialize(value);
-    //value.serialize(serializer: S)
-    //let query_map = value
-    &self
+  fn find_in_values(&self, query: &T) -> bool {
+    let doc_object = serde_json::to_value(&self.get_data()).unwrap();
+    let query_object = serde_json::to_value(query).unwrap();
+    let query_fields = query_object.as_object().unwrap();
+    let mut matches: Vec<i32> = Vec::new();
+    for (prop, field) in query_fields.iter() {
+      match doc_object.get(prop) {
+        Some(val) => {
+          if val == field {
+            matches.push(1);
+          }
+        }
+        None => (),
+      };
+    }
+    query_fields.len() == matches.len()
   }
   fn as_u8(&self) -> Vec<u8> {
     let mut vector = serde_json::to_vec(&self).unwrap();

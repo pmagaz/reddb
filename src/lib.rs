@@ -41,15 +41,16 @@ where
 
   pub fn find_one(&self, id: &Uuid) -> T {
     let store = self.store.to_read();
-    let result = find_key::<Document<T>>(&store, &id);
-    self.storage.write(&result.as_u8());
-    result.get_data().clone()
+    let doc = find_key::<Document<T>>(&store, &id);
+    self.storage.write(&doc.as_u8());
+    doc.get_data().clone()
   }
 
-  pub fn find(&self, value: T) -> usize {
+  pub fn find(&self, value: T) -> Vec<Document<T>> {
     let store = self.store.to_read();
-    let result = find_value::<T, Document<T>>(&store, value);
-
-    11
+    let docs = find_value::<T, Document<T>>(&store, value);
+    //self.storage.write(&doc.as_u8());
+    docs
+    //11
   }
 }
