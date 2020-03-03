@@ -7,7 +7,7 @@ use uuid::Uuid;
 use super::status::Status;
 
 pub trait Doc<T>: Clone + Sized + Debug {
-  fn new(id: Uuid, value: T, status: Status) -> Self;
+  fn new(id: Uuid, value: T) -> Self;
   fn get_id(&self) -> &Uuid;
   fn get_data(&self) -> &T;
   fn get_status(&self) -> &Status;
@@ -27,11 +27,11 @@ impl<'a, T> Doc<T> for Document<T>
 where
   T: Clone + Serialize + Deserialize<'a> + Debug,
 {
-  fn new(id: Uuid, value: T, status: Status) -> Self {
+  fn new(id: Uuid, value: T) -> Self {
     Self {
       _id: id,
       data: value,
-      status: status,
+      status: Status::default(),
     }
   }
   fn get_id(&self) -> &Uuid {
@@ -47,6 +47,7 @@ where
     &self.data
   }
   fn find_in_values(&self, query: &T) -> bool {
+    //FIXME pass serializer
     let doc_object = serde_json::to_value(&self.get_data()).unwrap();
     let query_object = serde_json::to_value(query).unwrap();
     let query_fields = query_object.as_object().unwrap();
@@ -64,6 +65,7 @@ where
     query_fields.len() == matches.len()
   }
   fn as_u8(&self) -> Vec<u8> {
+    //FIXME pass serializer
     let mut vector = serde_json::to_vec(&self).unwrap();
     vector.extend("\n".as_bytes());
     vector
