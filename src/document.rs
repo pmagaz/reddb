@@ -11,7 +11,7 @@ pub trait Doc<T>: Clone + Sized + Debug {
   fn get_data(&self) -> &T;
   fn set_data(&mut self, data: T) -> &Self;
   //FIXME
-  fn set_status(&mut self, status: Status) -> &Status;
+  fn set_status(&mut self, status: Status) -> &Self;
   fn get_status(&self) -> &Status;
   fn as_u8(&self) -> Vec<u8>;
   fn data_as_value(&self) -> Value;
@@ -42,9 +42,9 @@ where
   fn get_status(&self) -> &Status {
     &self.status
   }
-  fn set_status(&mut self, status: Status) -> &Status {
+  fn set_status(&mut self, status: Status) -> &Self {
     *&mut self.status = status;
-    &self.status
+    self
   }
   fn data_as_value(&self) -> Value {
     serde_json::to_value(&self.get_data()).unwrap()
