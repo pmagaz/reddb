@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Serializer, Value};
-use std::convert::From;
 use std::fmt::Debug;
 use uuid::Uuid;
 
@@ -10,10 +9,11 @@ pub trait Doc<T>: Clone + Sized + Debug {
   fn new(id: Uuid, value: T) -> Self;
   fn get_id(&self) -> &Uuid;
   fn get_data(&self) -> &T;
+  fn set_status(&mut self, status: Status) -> &Status;
   fn get_status(&self) -> &Status;
   fn as_u8(&self) -> Vec<u8>;
   fn data_as_value(&self) -> Value;
-  fn find_in_values(&self, value: &T) -> bool;
+  fn match_values(&self, value: &T) -> bool;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,13 +40,17 @@ where
   fn get_status(&self) -> &Status {
     &self.status
   }
+  fn set_status(&mut self, status: Status) -> &Status {
+    *&mut self.status = status;
+    &self.status
+  }
   fn data_as_value(&self) -> Value {
     serde_json::to_value(&self.get_data()).unwrap()
   }
   fn get_data(&self) -> &T {
     &self.data
   }
-  fn find_in_values(&self, query: &T) -> bool {
+  fn match_values(&self, query: &T) -> bool {
     //FIXME pass serializer
     let doc_object = serde_json::to_value(&self.get_data()).unwrap();
     let query_object = serde_json::to_value(query).unwrap();
