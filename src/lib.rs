@@ -7,7 +7,6 @@ use document::{Doc, Document};
 use store::Store;
 mod status;
 mod storage;
-use status::Status;
 use std::fmt::Debug;
 use storage::Storage;
 use store_handler::Handler;
@@ -48,18 +47,26 @@ where
     //doc.get_data().clone()
   }
 
-  pub fn find_all(&self, value: T) -> Vec<Document<T>> {
-    let store = self.store.to_read();
-    let docs = self
+  pub fn update_one(&self, id: &Uuid, newValue: T) -> Document<T> {
+    let mut store = self.store.to_write();
+    let doc = self
       .handler
-      .find_from_value::<T, Document<T>>(&store, value);
-    docs
+      .update_key::<T, Document<T>>(&mut store, &id, newValue);
+    doc.to_owned()
   }
 
   pub fn delete_one(&self, id: &Uuid) -> Document<T> {
     let mut store = self.store.to_write();
     let doc = self.handler.delete_key::<T, Document<T>>(&mut store, &id);
     doc
+  }
+
+  pub fn find_all(&self, value: T) -> Vec<Document<T>> {
+    let store = self.store.to_read();
+    let docs = self
+      .handler
+      .find_from_value::<T, Document<T>>(&store, value);
+    docs
   }
 
   pub fn delete_all(&self, value: T) -> Vec<Document<T>> {
@@ -70,7 +77,6 @@ where
       .find_from_value::<T, Document<T>>(&store, value);
 
     let deleted = docs.iter().map(|doc| self.delete_one(doc.get_id()));
-
     docs
   }
 }

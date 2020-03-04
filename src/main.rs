@@ -37,4 +37,8 @@ fn main() {
   println!("FIND DELETED ALL {:?}", result);
   let result = db2.find_all(json!({ "leches": true, "boo": 12}));
   println!("FIND ALL {:?}", result);
+  let id3 = db2.insert(json!({ "record": true, "foo": 11}));
+  let updated = db2.update_one(&id3, json!({ "record": false, "foo": 22}));
+  let result = db2.find_one(&id3);
+  println!("UPDATED ONE {:?}", result);
 }

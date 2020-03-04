@@ -9,6 +9,8 @@ pub trait Doc<T>: Clone + Sized + Debug {
   fn new(id: Uuid, value: T) -> Self;
   fn get_id(&self) -> &Uuid;
   fn get_data(&self) -> &T;
+  fn set_data(&mut self, data: T) -> &Self;
+  //FIXME
   fn set_status(&mut self, status: Status) -> &Status;
   fn get_status(&self) -> &Status;
   fn as_u8(&self) -> Vec<u8>;
@@ -49,6 +51,10 @@ where
   }
   fn get_data(&self) -> &T {
     &self.data
+  }
+  fn set_data(&mut self, data: T) -> &Self {
+    *&mut self.data = data;
+    self
   }
   fn match_values(&self, query: &T) -> bool {
     //FIXME pass serializer
