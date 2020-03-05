@@ -1,14 +1,16 @@
-use super::document::Doc;
+use super::document::{Doc, Document};
+use super::json_ser::DeSerializer;
 use super::status::Status;
 use super::store::{Read, Write};
-
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
 #[derive(Debug)]
-pub struct Handler;
+pub struct Handler<S> {
+  pub serializer: S,
+}
 
-impl Handler {
+impl<S> Handler<S> {
   pub fn insert<T, D>(&self, store: &mut Write<D>, doc: D) -> Uuid
   where
     D: Doc<T>,
@@ -28,14 +30,14 @@ impl Handler {
     &self,
     store: &'a mut Write<D>,
     id: &'a Uuid,
-    newValue: T,
+    new_value: T,
   ) -> MutexGuard<'a, D>
   where
     D: Doc<T>,
   {
-    let mut value = store.get_mut(&id).unwrap();
+    let value = store.get_mut(&id).unwrap();
     let mut doc = value.lock().unwrap();
-    doc.set_data(newValue);
+    doc.set_data(new_value);
     doc.set_status(Status::Updated);
     doc
     //*value = doc
@@ -51,22 +53,23 @@ impl Handler {
     doc.to_owned()
   }
 
-  pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, value: T) -> Vec<D>
+  pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, query: T) -> Vec<D>
   where
     D: Doc<T>,
   {
+    // self.serializer.serialize();
     let docs: Vec<D> = store
       .iter()
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
-      .filter(|doc| doc.match_values(&value))
+      .filter(|doc| doc.find_content(&query, self.serializer))
       .map(|doc| doc.to_owned())
       .collect();
 
     docs
   }
 
-  pub fn update_from_value<'a, T, D>(&self, store: &mut Write<D>, value: T) -> Vec<D>
+  pub fn update_from_value<'a, T, D>(&self, store: &mut Write<D>, query: T, new_value: T) -> Vec<D>
   where
     D: Doc<T>,
   {
@@ -74,7 +77,14 @@ impl Handler {
       .iter_mut()
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
-      .filter(|doc| doc.match_values(&value))
+      .map(|doc| {
+        let id = doc.get_id();
+        let content = doc.update_content(&query, &new_value);
+        //doc.set_data(content);
+        //let doc = Document::new(*id, content);
+        doc
+        //self.update_key(, id: &'a Uuid, new_value: T)
+      })
       .map(|doc| doc.to_owned())
       .collect();
 
