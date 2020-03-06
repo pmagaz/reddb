@@ -62,7 +62,7 @@ impl<S> Handler<S> {
       .iter()
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
-      .filter(|doc| doc.find_content(&query, self.serializer))
+      .filter(|doc| doc.find_content(&query))
       .map(|doc| doc.to_owned())
       .collect();
 
