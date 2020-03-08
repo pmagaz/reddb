@@ -21,18 +21,19 @@ pub type JsonSerializer = Json;
 pub struct RedDb<T, DS> {
   pub store: Store<Document<T>>,
   pub handler: Handler<DS>,
-  //pub serializer: S,
+  pub serializer: DS,
   pub storage: Storage,
 }
 
 impl<'a, T, DS> RedDb<T, DS>
 where
-  T: Clone + Serialize + Deserialize<'a> + Debug,
-  DS: DeSerializer<'a, T> + Debug + Clone,
+  for<'de> T: Clone + Serialize + Deserialize<'de> + Debug,
+  for<'de> DS: DeSerializer<'de, Document<T>> + Debug + Clone,
+  //Document<T>: DeSerializer<'a, Document<T>>,
 {
   pub fn new() -> Self {
     Self {
-      //serializer: Json,
+      serializer: DS::default(),
       handler: Handler::<DS> {
         serializer: DS::default(),
       },
@@ -72,15 +73,16 @@ where
     let store = self.store.to_read();
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>>(&store, query);
+      .find_from_value::<T, Document<T>, DS>(&store, query);
     docs
   }
 
   pub fn update_all(&self, query: T, new_value: T) -> Vec<Document<T>> {
     let mut store = self.store.to_write();
+    let serializer = &self.serializer;
     let docs = self
       .handler
-      .update_from_value::<T, Document<T>>(&mut store, query, new_value);
+      .update_from_value::<T, Document<T>, DS>(&mut store, serializer, query, new_value);
     docs
   }
 
@@ -89,7 +91,7 @@ where
 
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>>(&store, query);
+      .find_from_value::<T, Document<T>, DS>(&store, query);
 
     let deleted = docs.iter().map(|doc| self.delete_one(doc.get_id()));
     docs

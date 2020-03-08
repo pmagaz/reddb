@@ -2,6 +2,8 @@ use super::document::{Doc, Document};
 use super::json_ser::DeSerializer;
 use super::status::Status;
 use super::store::{Read, Write};
+use serde::de::Deserialize;
+use serde::Serialize;
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
@@ -53,11 +55,19 @@ impl<S> Handler<S> {
     doc.to_owned()
   }
 
-  pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, query: T) -> Vec<D>
+  pub fn find_from_value<'a, T, D, DS>(&self, store: &'a Read<D>, query: T) -> Vec<D>
   where
-    D: Doc<T>,
+    T: Serialize + Deserialize<'a>,
+    D: Doc<T> + Serialize + Deserialize<'a>,
+    DS: DeSerializer<'a, Document<T>>,
+    //T: document::_IMPL_DESERIALIZE_FOR_Document::_serde::Serializer
+    //T: document::_IMPL_DESERIALIZE_FOR_Document::_serde::Deserialize<'_>
   {
+    //self.serializer.serialize();
     // self.serializer.serialize();
+
+    //let leches = serializer.serialize();
+
     let docs: Vec<D> = store
       .iter()
       .map(|(_id, doc)| doc.lock().unwrap())
@@ -69,9 +79,17 @@ impl<S> Handler<S> {
     docs
   }
 
-  pub fn update_from_value<'a, T, D>(&self, store: &mut Write<D>, query: T, new_value: T) -> Vec<D>
+  pub fn update_from_value<'a, T, D, DS>(
+    &self,
+    store: &mut Write<D>,
+    serializer: &S,
+    query: T,
+    new_value: T,
+  ) -> Vec<D>
   where
-    D: Doc<T>,
+    T: Serialize + Deserialize<'a>,
+    D: Doc<T> + Serialize + Deserialize<'a>,
+    S: DeSerializer<'a, D>,
   {
     let docs: Vec<D> = store
       .iter_mut()
@@ -80,6 +98,9 @@ impl<S> Handler<S> {
       .map(|doc| {
         let id = doc.get_id();
         let content = doc.update_content(&query, &new_value);
+        let hostias = &*doc;
+        let leches = serializer.serialize(hostias);
+        println!("{:?}", leches);
         //doc.set_data(content);
         //let doc = Document::new(*id, content);
         doc
