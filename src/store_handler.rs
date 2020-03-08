@@ -57,17 +57,9 @@ impl<S> Handler<S> {
 
   pub fn find_from_value<'a, T, D, DS>(&self, store: &'a Read<D>, query: T) -> Vec<D>
   where
-    T: Serialize + Deserialize<'a>,
     D: Doc<T> + Serialize + Deserialize<'a>,
-    DS: DeSerializer<'a, Document<T>>,
-    //T: document::_IMPL_DESERIALIZE_FOR_Document::_serde::Serializer
-    //T: document::_IMPL_DESERIALIZE_FOR_Document::_serde::Deserialize<'_>
+    DS: DeSerializer<'a, D>,
   {
-    //self.serializer.serialize();
-    // self.serializer.serialize();
-
-    //let leches = serializer.serialize();
-
     let docs: Vec<D> = store
       .iter()
       .map(|(_id, doc)| doc.lock().unwrap())
@@ -87,7 +79,6 @@ impl<S> Handler<S> {
     new_value: T,
   ) -> Vec<D>
   where
-    T: Serialize + Deserialize<'a>,
     D: Doc<T> + Serialize + Deserialize<'a>,
     S: DeSerializer<'a, D>,
   {
@@ -98,13 +89,9 @@ impl<S> Handler<S> {
       .map(|doc| {
         let id = doc.get_id();
         let content = doc.update_content(&query, &new_value);
-        let hostias = &*doc;
-        let leches = serializer.serialize(hostias);
+        let leches = serializer.serialize(&*doc);
         println!("{:?}", leches);
-        //doc.set_data(content);
-        //let doc = Document::new(*id, content);
         doc
-        //self.update_key(, id: &'a Uuid, new_value: T)
       })
       .map(|doc| doc.to_owned())
       .collect();

@@ -4,15 +4,15 @@ extern crate reddb;
 use reddb::{Json, RedDb};
 
 fn main() {
-  // #[derive(Debug, Clone, Serialize, Deserialize)]
-  // struct MyStruct {
-  //   leches: String,
-  // };
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  struct MyStruct {
+    leches: String,
+  };
 
-  // let db = RedDb::<MyStruct>::new();
-  // let id = db.insert(MyStruct {
-  //   leches: String::from("hola"),
-  // });
+  let db = RedDb::<MyStruct, Json>::new();
+  let id = db.insert(MyStruct {
+    leches: String::from("hola"),
+  });
 
   // let result = db.find_all(MyStruct {
   //   leches: String::from("hola"),

@@ -29,7 +29,6 @@ impl<'a, T, DS> RedDb<T, DS>
 where
   for<'de> T: Clone + Serialize + Deserialize<'de> + Debug,
   for<'de> DS: DeSerializer<'de, Document<T>> + Debug + Clone,
-  //Document<T>: DeSerializer<'a, Document<T>>,
 {
   pub fn new() -> Self {
     Self {
@@ -66,6 +65,7 @@ where
   pub fn delete_one(&self, id: &Uuid) -> Document<T> {
     let mut store = self.store.to_write();
     let doc = self.handler.delete_key::<T, Document<T>>(&mut store, &id);
+    let leches = self.serializer.serialize(&doc);
     doc
   }
 

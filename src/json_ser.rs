@@ -15,6 +15,7 @@ pub struct Json;
 
 impl<'a, T: Serialize + DeserializeOwned> DeSerializer<'a, T> for Json {
   fn serialize(&self, value: &T) -> Vec<u8> {
+    println!("Json!");
     serde_json::to_vec(value).unwrap()
   }
   fn deserialize<R: Read>(&self, value: R) -> T {
