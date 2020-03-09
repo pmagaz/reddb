@@ -15,6 +15,10 @@ fn main() {
   // });
   // let result = db.find_one(&id);
   // println!("FIND_ONE {:?}", result);
+  // let result = db.find_all(MyStruct {
+  //   leches: String::from("hola"),
+  // });
+  // println!("FIND ALL {:?}", result);
 
   // let result = db.find_all(MyStruct {
   //   leches: String::from("hola"),
@@ -22,7 +26,7 @@ fn main() {
   // let result = db.find_one(&id);
   // println!("FIND_ONE {:?}", result);
 
-  // let db = RedDb::<&str, Json>::new();
+  // let db = RedDb::<&str, JsonSerializer>::new();
   // let id = db.insert(
   //   r#"
   //       {
@@ -61,6 +65,5 @@ fn main() {
     json!({ "record": "updated!"}),
   );
   let result = db2.find_all(json!({ "record": "updated!"}));
-
   println!("UPDATED ALL {:?}", result);
 }

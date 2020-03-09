@@ -18,7 +18,7 @@ use store_handler::Handler;
 #[derive(Debug)]
 pub struct RedDb<T, DS> {
   pub store: Store<Doc<T>>,
-  pub handler: Handler<DS>,
+  pub handler: Handler,
   pub serializer: DS,
   pub storage: Storage,
 }
@@ -31,9 +31,7 @@ where
   pub fn new() -> Self {
     Self {
       serializer: DS::default(),
-      handler: Handler::<DS> {
-        serializer: DS::default(),
-      },
+      handler: Handler::default(),
       store: Store::<Doc<T>>::new(),
       storage: Storage::new(".db").unwrap(),
     }
