@@ -64,11 +64,7 @@ impl Handler {
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
       .filter(|doc| {
-        println!("Hola");
-        //*doc.into_iter();
-        let data = doc.get_data();
-        let leches = serializer.serializer(&*doc);
-        println!("{:?}", leches);
+        let _leches = serializer.serializer(&*doc);
         doc.find_content(&query)
       })
       .map(|doc| doc.to_owned())
@@ -80,7 +76,7 @@ impl Handler {
   pub fn update_from_value<'a, T, D, S>(
     &self,
     store: &mut Write<D>,
-    serializer: &S,
+    _serializer: &S,
     query: T,
     new_value: T,
   ) -> Vec<D>
@@ -93,10 +89,7 @@ impl Handler {
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
       .map(|doc| {
-        let id = doc.get_id();
-        let content = doc.update_content(&query, &new_value);
-        let leches = serializer.serializer(&*doc);
-        println!("{:?}", leches);
+        let _content = doc.update_content(&query, &new_value);
         doc
       })
       .map(|doc| doc.to_owned())
