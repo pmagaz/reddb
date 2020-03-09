@@ -71,7 +71,7 @@ where
     let store = self.store.to_read();
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>, DS>(&store, &self.serializer, query);
+      .find_from_value::<T, Document<T>>(&store, &self.serializer, query);
     docs
   }
 
@@ -80,7 +80,7 @@ where
     let serializer = &self.serializer;
     let docs = self
       .handler
-      .update_from_value::<T, Document<T>, DS>(&mut store, serializer, query, new_value);
+      .update_from_value::<T, Document<T>>(&mut store, serializer, query, new_value);
     docs
   }
 
@@ -89,7 +89,7 @@ where
 
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>, DS>(&store, &self.serializer, query);
+      .find_from_value::<T, Document<T>>(&store, &self.serializer, query);
 
     let deleted = docs.iter().map(|doc| self.delete_one(doc.get_id()));
     docs
