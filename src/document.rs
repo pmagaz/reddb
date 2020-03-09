@@ -93,7 +93,6 @@ where
       };
     }
     doc_object
-    //query_fields.len() == matches.len()
   }
   fn as_u8(&self) -> Vec<u8> {
     //FIXME pass serializer

@@ -87,7 +87,7 @@ where
       .handler
       .find_from_value(&store, &self.serializer, query);
 
-    let deleted = docs.iter().map(|doc| self.delete_one(doc.get_id()));
+    docs.iter().map(|doc| self.delete_one(doc.get_id()));
     docs
   }
 }

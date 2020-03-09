@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Serializer, Value};
+use serde_json::{json, Value};
 extern crate reddb;
 use reddb::{JsonSerializer, RedDb};
 
@@ -9,38 +9,25 @@ fn main() {
     leches: String,
   };
 
-  // let db = RedDb::<MyStruct, JsonSerializer>::new();
-  // let id = db.insert(MyStruct {
-  //   leches: String::from("hola"),
-  // });
-  // let result = db.find_one(&id);
-  // println!("FIND_ONE {:?}", result);
-  // let result = db.find_all(MyStruct {
-  //   leches: String::from("hola"),
-  // });
-  // println!("FIND ALL {:?}", result);
+  let db = RedDb::<MyStruct, JsonSerializer>::new();
+  let _id = db.insert(MyStruct {
+    leches: String::from("hola"),
+  });
+  let id = db.insert(MyStruct {
+    leches: String::from("hola"),
+  });
+  let result = db.find_one(&id);
+  println!("FIND_ONE {:?}", result);
+  let result = db.find_all(MyStruct {
+    leches: String::from("hola"),
+  });
+  println!("FIND ALL {:?}", result);
 
-  // let result = db.find_all(MyStruct {
-  //   leches: String::from("hola"),
-  // });
-  // let result = db.find_one(&id);
-  // println!("FIND_ONE {:?}", result);
-
-  // let db = RedDb::<&str, JsonSerializer>::new();
-  // let id = db.insert(
-  //   r#"
-  //       {
-  //           "name": "John Doe",
-  //           "age": 43,
-  //           "phones": [
-  //               "+44 1234567",
-  //               "+44 2345678"
-  //           ]
-  //       }"#,
-  // );
+  let result = db.find_one(&id);
+  println!("FIND_ONE {:?}", result);
 
   let db2 = RedDb::<Value, JsonSerializer>::new();
-  let id = db2.insert(json!({ "leches": true}));
+  let _id = db2.insert(json!({ "leches": true}));
   let id = db2.insert(json!({ "leches": true, "boo": 12}));
   let id2 = db2.insert(json!({ "leches": false}));
   let result = db2.find_one(&id);
@@ -48,19 +35,19 @@ fn main() {
   db2.insert(json!({"name":"record1", "leches": 11}));
   let result = db2.find_all(json!({"name":"record1", "leches": 11}));
   println!("FIND ALL {:?}", result);
-  let id = db2.delete_one(&id2);
+  db2.delete_one(&id2);
   let result = db2.find_all(json!({ "leches": false}));
   println!("FIND DELETED ONE {:?}", result);
-  let id = db2.delete_all(json!({ "leches": true}));
+  db2.delete_all(json!({ "leches": true}));
   let result = db2.find_all(json!({ "leches": false}));
   println!("FIND DELETED ALL {:?}", result);
   let result = db2.find_all(json!({ "leches": true, "boo": 12}));
   println!("FIND ALL {:?}", result);
   let id3 = db2.insert(json!({ "record": true, "foo": 11}));
-  let updated = db2.update_one(&id3, json!({ "record": "updateeeed"}));
+  db2.update_one(&id3, json!({ "record": "updateeeed"}));
   let result = db2.find_one(&id3);
   println!("UPDATED ONE {:?}", result);
-  let updated = db2.update_all(
+  db2.update_all(
     json!({ "record": "updateeeed"}),
     json!({ "record": "updated!"}),
   );
