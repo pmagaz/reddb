@@ -5,12 +5,11 @@ use uuid::Uuid;
 
 use super::status::Status;
 
-pub trait Doc<T>: Clone + Sized + Debug {
+pub trait Document<T>: Clone + Sized + Debug {
   fn new(value: T) -> Self;
   fn get_id(&self) -> &Uuid;
   fn get_data(&self) -> &T;
   fn set_data(&mut self, data: T) -> &Self;
-  //FIXME
   fn set_status(&mut self, status: Status) -> &Self;
   fn get_status(&self) -> &Status;
   fn as_u8(&self) -> Vec<u8>;
@@ -20,21 +19,19 @@ pub trait Doc<T>: Clone + Sized + Debug {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Document<T> {
+pub struct Doc<T> {
   pub _id: Uuid,
   pub data: T,
   pub status: Status,
 }
 
-impl<'a, T> Doc<T> for Document<T>
+impl<'a, T> Document<T> for Doc<T>
 where
   T: Clone + Serialize + Deserialize<'a> + Debug,
 {
   fn new(value: T) -> Self {
-    let id = Uuid::new_v4();
-
     Self {
-      _id: id,
+      _id: Uuid::new_v4(),
       data: value,
       status: Status::default(),
     }
