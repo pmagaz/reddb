@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
 use super::deserializer::DeSerializer;
-use super::document::Doc;
+use super::document::Document;
 use super::status::Status;
 use super::store::{Read, Write};
 
@@ -15,7 +15,7 @@ pub struct Handler<S> {
 impl<S> Handler<S> {
   pub fn insert<T, D>(&self, store: &mut Write<D>, doc: D) -> Uuid
   where
-    D: Doc<T>,
+    D: Document<T>,
   {
     let _id = **&doc.get_id();
     let _result = store.insert(_id, Mutex::new(doc));
@@ -35,7 +35,7 @@ impl<S> Handler<S> {
     new_value: T,
   ) -> MutexGuard<'a, D>
   where
-    D: Doc<T>,
+    D: Document<T>,
   {
     let value = store.get_mut(&id).unwrap();
     let mut doc = value.lock().unwrap();
@@ -47,7 +47,7 @@ impl<S> Handler<S> {
 
   pub fn delete_key<'a, T, D>(&self, store: &mut Write<D>, id: &'a Uuid) -> D
   where
-    D: Doc<T>,
+    D: Document<T>,
   {
     let result = store.remove(id).unwrap();
     let mut doc = result.lock().unwrap();
@@ -57,7 +57,7 @@ impl<S> Handler<S> {
 
   pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, serializer: &S, query: T) -> Vec<D>
   where
-    D: Doc<T> + Serialize + Deserialize<'a>,
+    D: Document<T> + Serialize + Deserialize<'a>,
     S: DeSerializer<'a, D>,
   {
     let docs: Vec<D> = store
@@ -86,7 +86,7 @@ impl<S> Handler<S> {
     new_value: T,
   ) -> Vec<D>
   where
-    D: Doc<T> + Serialize + Deserialize<'a>,
+    D: Document<T> + Serialize + Deserialize<'a>,
     S: DeSerializer<'a, D>,
   {
     let docs: Vec<D> = store
