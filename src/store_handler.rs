@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::default::Default;
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
@@ -7,12 +8,10 @@ use super::document::Document;
 use super::status::Status;
 use super::store::{Read, Write};
 
-#[derive(Debug)]
-pub struct Handler<S> {
-  pub serializer: S,
-}
+#[derive(Debug, Default)]
+pub struct Handler;
 
-impl<S> Handler<S> {
+impl Handler {
   pub fn insert<T, D>(&self, store: &mut Write<D>, doc: D) -> Uuid
   where
     D: Document<T>,
@@ -55,7 +54,7 @@ impl<S> Handler<S> {
     doc.to_owned()
   }
 
-  pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, serializer: &S, query: T) -> Vec<D>
+  pub fn find_from_value<'a, T, D, S>(&self, store: &'a Read<D>, serializer: &S, query: T) -> Vec<D>
   where
     D: Document<T> + Serialize + Deserialize<'a>,
     S: DeSerializer<'a, D>,
@@ -67,7 +66,7 @@ impl<S> Handler<S> {
       .filter(|doc| {
         println!("Hola");
         //*doc.into_iter();
-        // /let leches = serializer.serializer::<D>(&*doc);
+        let data = doc.get_data();
         let leches = serializer.serializer(&*doc);
         println!("{:?}", leches);
         doc.find_content(&query)
@@ -78,7 +77,7 @@ impl<S> Handler<S> {
     docs
   }
 
-  pub fn update_from_value<'a, T, D>(
+  pub fn update_from_value<'a, T, D, S>(
     &self,
     store: &mut Write<D>,
     serializer: &S,
