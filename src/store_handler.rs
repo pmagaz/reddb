@@ -55,12 +55,7 @@ impl<S> Handler<S> {
     doc.to_owned()
   }
 
-  pub fn find_from_value<'a, T, D, DS>(
-    &self,
-    store: &'a Read<D>,
-    serializer: &S,
-    query: T,
-  ) -> Vec<D>
+  pub fn find_from_value<'a, T, D>(&self, store: &'a Read<D>, serializer: &S, query: T) -> Vec<D>
   where
     D: Doc<T> + Serialize + Deserialize<'a>,
     S: DeSerializer<'a, D>,
@@ -73,8 +68,8 @@ impl<S> Handler<S> {
         println!("Hola");
         //*doc.into_iter();
         // /let leches = serializer.serializer::<D>(&*doc);
-        //let leches = serializer.deserializer(&*doc);
-        // println!("{:?}", leches);
+        let leches = serializer.serializer(&*doc);
+        println!("{:?}", leches);
         doc.find_content(&query)
       })
       .map(|doc| doc.to_owned())
@@ -83,7 +78,7 @@ impl<S> Handler<S> {
     docs
   }
 
-  pub fn update_from_value<'a, T, D, DS>(
+  pub fn update_from_value<'a, T, D>(
     &self,
     store: &mut Write<D>,
     serializer: &S,
