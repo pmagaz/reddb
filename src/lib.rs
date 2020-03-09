@@ -1,21 +1,19 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use uuid::Uuid;
+
 mod document;
 mod store;
 mod store_handler;
 use document::{Doc, Document};
 use store::Store;
-mod json_ser;
+mod deserializer;
 mod status;
 mod storage;
-pub use json_ser::{DeSerializer, DeserializeOwned, Json};
-//use serde_json::Serializer;
-use std::fmt::Debug;
 use storage::Storage;
-use store_handler::Handler;
 
-//pub type ReadJson<T> = RedDb<Document<T>>;
-pub type JsonSerializer = Json;
+pub use deserializer::{DeSerializer, JsonSerializer};
+use store_handler::Handler;
 
 #[derive(Debug)]
 pub struct RedDb<T, DS> {
@@ -27,7 +25,7 @@ pub struct RedDb<T, DS> {
 
 impl<'a, T, DS> RedDb<T, DS>
 where
-  for<'de> T: Clone + Serialize + Deserialize<'de> + Debug,
+  for<'de> T: Serialize + Deserialize<'de> + Debug + Clone,
   for<'de> DS: DeSerializer<'de, Document<T>> + Debug + Clone,
 {
   pub fn new() -> Self {
@@ -65,7 +63,7 @@ where
   pub fn delete_one(&self, id: &Uuid) -> Document<T> {
     let mut store = self.store.to_write();
     let doc = self.handler.delete_key::<T, Document<T>>(&mut store, &id);
-    let leches = self.serializer.serialize(&doc);
+    //let leches = self.serializer.serialize(&doc);
     doc
   }
 
@@ -73,7 +71,7 @@ where
     let store = self.store.to_read();
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>, DS>(&store, query);
+      .find_from_value::<T, Document<T>, DS>(&store, &self.serializer, query);
     docs
   }
 
@@ -91,7 +89,7 @@ where
 
     let docs = self
       .handler
-      .find_from_value::<T, Document<T>, DS>(&store, query);
+      .find_from_value::<T, Document<T>, DS>(&store, &self.serializer, query);
 
     let deleted = docs.iter().map(|doc| self.delete_one(doc.get_id()));
     docs

@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::io::Read;
@@ -6,6 +5,7 @@ use std::io::{BufRead, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::result;
 use std::sync::Mutex;
+
 pub type Result<T> = result::Result<T, Error>;
 
 //FIXME READ
