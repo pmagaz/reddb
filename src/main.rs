@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Serializer, Value};
 extern crate reddb;
-use reddb::{Json, RedDb};
+use reddb::{JsonSerializer, RedDb};
 
 fn main() {
   #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,10 +9,12 @@ fn main() {
     leches: String,
   };
 
-  let db = RedDb::<MyStruct, Json>::new();
-  let id = db.insert(MyStruct {
-    leches: String::from("hola"),
-  });
+  // let db = RedDb::<MyStruct, JsonSerializer>::new();
+  // let id = db.insert(MyStruct {
+  //   leches: String::from("hola"),
+  // });
+  // let result = db.find_one(&id);
+  // println!("FIND_ONE {:?}", result);
 
   // let result = db.find_all(MyStruct {
   //   leches: String::from("hola"),
@@ -33,7 +35,7 @@ fn main() {
   //       }"#,
   // );
 
-  let db2 = RedDb::<Value, Json>::new();
+  let db2 = RedDb::<Value, JsonSerializer>::new();
   let id = db2.insert(json!({ "leches": true}));
   let id = db2.insert(json!({ "leches": true, "boo": 12}));
   let id2 = db2.insert(json!({ "leches": false}));

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Serializer, Value};
+use serde_json::Value;
 use std::fmt::Debug;
 use uuid::Uuid;
 

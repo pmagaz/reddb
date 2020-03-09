@@ -1,11 +1,11 @@
-use super::document::{Doc, Document};
-use super::json_ser::DeSerializer;
-use super::status::Status;
-use super::store::{Read, Write};
-use serde::de::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
+
+use super::deserializer::DeSerializer;
+use super::document::Doc;
+use super::status::Status;
+use super::store::{Read, Write};
 
 #[derive(Debug)]
 pub struct Handler<S> {
@@ -55,16 +55,28 @@ impl<S> Handler<S> {
     doc.to_owned()
   }
 
-  pub fn find_from_value<'a, T, D, DS>(&self, store: &'a Read<D>, query: T) -> Vec<D>
+  pub fn find_from_value<'a, T, D, DS>(
+    &self,
+    store: &'a Read<D>,
+    serializer: &S,
+    query: T,
+  ) -> Vec<D>
   where
     D: Doc<T> + Serialize + Deserialize<'a>,
-    DS: DeSerializer<'a, D>,
+    S: DeSerializer<'a, D>,
   {
     let docs: Vec<D> = store
       .iter()
       .map(|(_id, doc)| doc.lock().unwrap())
       .filter(|doc| doc.get_status() != &Status::Deleted)
-      .filter(|doc| doc.find_content(&query))
+      .filter(|doc| {
+        println!("Hola");
+        //*doc.into_iter();
+        // /let leches = serializer.serializer::<D>(&*doc);
+        //let leches = serializer.deserializer(&*doc);
+        // println!("{:?}", leches);
+        doc.find_content(&query)
+      })
       .map(|doc| doc.to_owned())
       .collect();
 
@@ -89,7 +101,7 @@ impl<S> Handler<S> {
       .map(|doc| {
         let id = doc.get_id();
         let content = doc.update_content(&query, &new_value);
-        let leches = serializer.serialize(&*doc);
+        let leches = serializer.serializer(&*doc);
         println!("{:?}", leches);
         doc
       })
