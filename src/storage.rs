@@ -22,8 +22,6 @@ impl Storage {
             .create(true)
             .open(&path)?;
 
-        println!("[RedDb] Seting up persistence");
-
         Ok(Self {
             file: Mutex::new(storage),
         })
@@ -31,7 +29,6 @@ impl Storage {
 
     //TODO read line by line
     pub fn read_content(&self, mut buf: &mut Vec<u8>) -> usize {
-        println!("[RedDb] Reading database content");
         let content = self.file.try_lock().unwrap().read_to_end(&mut buf).unwrap();
         content
     }
