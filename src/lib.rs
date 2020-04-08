@@ -7,8 +7,7 @@ use uuid::Uuid;
 mod document;
 mod record;
 mod store;
-use document::{Doc, Document};
-use record::Record;
+use record::{Empty, Record};
 use store::Store;
 mod deserializer;
 mod json;
@@ -39,7 +38,7 @@ where
     }
   }
 
-  pub fn insert<T>(&self, value: T) -> Uuid
+  pub fn insert_one<T>(&self, value: T) -> Uuid
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
   {
@@ -61,62 +60,89 @@ where
     self.serializer.deserializer(&*guard)
   }
 
-  pub fn update_one<T>(&'a self, id: &Uuid, new_value: &'a T) -> &T
+  pub fn update_one<T>(&'a self, id: &Uuid, new_value: T) -> Uuid
   where
-    for<'de> &'a T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
     let mut store = self.store.to_write();
     let value = store.get_mut(&id).unwrap();
     let mut guard = value.lock().unwrap();
     *guard = self.serializer.serializer(&*guard);
-    self.persist(id.to_owned(), new_value, Status::Updated);
-    new_value
+    self.persist(*id, new_value, Status::Updated);
+    id.to_owned()
   }
 
-  // pub fn delete_one(&self, id: &Uuid) -> T {
-  //   let mut store = self.store.to_write();
-  //   let result = store.remove(id).unwrap();
-  //   let value = result.lock().unwrap();
-  //   value.to_owned()
-  // }
+  pub fn delete_one(&self, id: &Uuid) -> Uuid {
+    let mut store = self.store.to_write();
+    let _result = store.remove(id).unwrap();
+    self.persist::<Empty>(*id, Empty, Status::Deleted);
+    id.to_owned()
+  }
 
-  // pub fn find_all(&self, query: &T) -> Vec<T> {
-  //   let store = self.store.to_read();
-  //   let docs: Vec<T> = store
-  //     .iter()
-  //     .map(|(_id, value)| value.lock().unwrap())
-  //     .filter(|value| **value == *query)
-  //     .map(|value| value.to_owned())
-  //     .collect();
-  //   docs
-  // }
+  pub fn find_all<T>(&self, query: &T) -> Vec<T>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  {
+    let store = self.store.to_read();
+    let serialized = self.serializer.serializer(query);
+    let docs: Vec<T> = store
+      .iter()
+      .map(|(_id, value)| value.lock().unwrap())
+      .filter(|value| **value == serialized)
+      .map(|value| self.serializer.deserializer(&*value))
+      .collect();
+    docs
+  }
 
-  // pub fn update_all(&self, query: &T, new_value: &T) -> usize {
-  //   let mut store = self.store.to_write();
-
-  //   for x in &mut *store {
-  //     let (_id, value) = x;
-  //     let value = value.lock().unwrap();
-  //     println!("ALLL {:?}", value);
-  //   }
-
-  //   let docs: Vec<(&Uuid, T)> = store
-  //     .iter_mut()
-  //     //.map(|(_id, value)| value.lock().unwrap())
-  //     //.filter(|value| **value == *query)
-  //     //.map(|value| value.to_owned())
-  //     .map(|(_id, value)| {
-  //       let mut guard = value.lock().unwrap();
-  //       if *guard == *query {
-  //         *guard = new_value.to_owned();
-  //       }
-  //       (_id, guard.to_owned())
-  //       let leches = self.serializer.serializer(&doc);
-
-  //     })
-  //     .collect();
-  //   12
-  // }
+  pub fn update_all<T>(&self, query: &T, new_value: T) -> usize
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  {
+    let mut store = self.store.to_write();
+    let ser_query = self.serializer.serializer(query);
+    //let serialized = self.serializer.serializer(&new_value);
+    // let arrUpdate: Vec<Vec<u8>> = vec![];
+    let docs: Vec<Vec<u8>> = store
+      .iter_mut()
+      .map(|(_id, value)| value.lock().unwrap())
+      .filter(|value| **value == ser_query)
+      .map(|mut guard| {
+        let serialized = self.serializer.serializer(&new_value);
+        *guard = serialized;
+        serialized
+      })
+      .collect();
+    let mut arrUpdate: Vec<&Vec<u8>> = vec![];
+    for x in &mut *store {
+      let (_id, value) = x;
+      let mut guard = value.lock().unwrap();
+      if *guard == ser_query {
+        *guard = self.serializer.serializer(&new_value);
+        arrUpdate.push(serialized);
+      }
+      println!("ALLL {:?}", value);
+    }
+    // .map(|mut value| {
+    //   *value = serialized;
+    //   //     *guard = updated;
+    //   //let updated = self.serializer.serializer(&*value);
+    //   // *value = updated;
+    //   // *updated
+    //   *value
+    // })
+    // .map(|(_id, value)| {
+    //   let mut guard = value.lock().unwrap();
+    //   if *guard == serialized {
+    //     //*guard = new_value.to_owned();
+    //     let updated = self.serializer.serializer(&*guard);
+    //     *guard = updated;
+    //     // arrUpdate.push(updated);
+    //   }
+    // })
+    //.collect();
+    //12
+    docs.len()
+  }
 
   pub fn persist<T>(&self, id: Uuid, data: T, status: Status)
   where
