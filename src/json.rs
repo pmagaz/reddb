@@ -14,16 +14,19 @@ struct MyStruct {
 pub struct Json;
 pub type JsonSerializer = Json;
 
-impl<'a, T> DeSerializer<'a, T> for Json
-where
-  for<'de> T: Serialize + Deserialize<'de>,
-{
-  fn serializer(&self, value: &T) -> Vec<u8> {
+impl<'a> DeSerializer<'a> for Json {
+  fn serializer<T>(&self, value: &T) -> Vec<u8>
+  where
+    for<'de> T: Serialize + Deserialize<'de>,
+  {
     let mut vector = serde_json::to_vec(value).unwrap();
     vector.extend("\n".as_bytes());
     vector
   }
-  fn deserializer(&self, value: &str) -> T {
-    serde_json::from_str(value).unwrap()
+  fn deserializer<T>(&self, value: &Vec<u8>) -> T
+  where
+    for<'de> T: Serialize + Deserialize<'de>,
+  {
+    serde_json::from_slice::<T>(value).unwrap()
   }
 }

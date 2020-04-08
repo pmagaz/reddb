@@ -23,40 +23,41 @@ fn main() {
   let new_value = MyStruct {
     foo: String::from("new Value"),
   };
-  let db = RedDb::<MyStruct, JsonSerializer>::new();
+  let db = RedDb::<JsonSerializer>::new();
   let _id = db.insert(query.clone());
+  let _id = db.insert(String::from("hola"));
   let id = db.insert(MyStruct {
     foo: String::from("holaa"),
   });
-  let result = db.find_one(&id);
+  let result = db.find_one::<MyStruct>(&id);
   println!("FIND_ONE {:?}", result);
-  let result = db.find_all(&query);
-  println!("FIND ALL {:?}", result);
-  let result = db.update_one(&_id, &new_value);
-  println!("FIND ONE UPDATED {:?}", result);
-  let result = db.update_all(&query, &new_value);
-  println!("UPDATE ALL {:?}", result);
+  // let result = db.find_all(&query);
+  // println!("FIND ALL {:?}", result);
+  // let result = db.update_one(&_id, &new_value);
+  // println!("FIND ONE UPDATED {:?}", result);
+  // let result = db.update_all(&query, &new_value);
+  // println!("UPDATE ALL {:?}", result);
 
-  println!("JSON STRINGS");
-  let db = RedDb::<String, JsonSerializer>::new();
-  let query = r#"
-        {
-            "leches": true,
-            "boo": 12,
-        }"#;
+  // println!("JSON STRINGS");
+  // let db = RedDb::<String, JsonSerializer>::new();
+  // let query = r#"
+  //       {
+  //           "leches": true,
+  //           "boo": 12,
+  //       }"#;
 
-  let query2 = r#"
-        {
-            "leches": false,
-            "boo": 12,
-        }"#;
+  // let query2 = r#"
+  //       {
+  //           "leches": false,
+  //           "boo": 12,
+  //       }"#;
 
-  let id = db.insert(query.to_owned());
-  println!("INSERT {:?}", &id);
-  let result = db.find_one(&id);
-  println!("FIND_ONE {:?}", result);
-  let result = db.find_all(&query2.to_owned());
-  println!("FIND ALL {:?}", result);
+  // let id = db.insert(query.to_owned());
+  // println!("INSERT {:?}", &id);
+  // let result = db.find_one(&id);
+  // println!("FIND_ONE {:?}", result);
+  // let result = db.find_all(&query2.to_owned());
+  // println!("FIND ALL {:?}", result);
   //JSON VALUES
   //println!("JSON VALUES");
 
