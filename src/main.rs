@@ -23,20 +23,26 @@ fn main() {
   let new_value = MyStruct {
     foo: String::from("new Value"),
   };
+  let new_value2 = MyStruct {
+    foo: String::from("new Value"),
+  };
   let db = RedDb::<JsonSerializer>::new();
-  let _id = db.insert(query.clone());
-  let _id = db.insert(String::from("hola"));
-  let id = db.insert(MyStruct {
+  let _id = db.insert_one(query.clone());
+  let _id = db.insert_one(String::from("hola"));
+  let id = db.insert_one(MyStruct {
     foo: String::from("holaa"),
   });
   let result = db.find_one::<MyStruct>(&id);
   println!("FIND_ONE {:?}", result);
-  // let result = db.find_all(&query);
-  // println!("FIND ALL {:?}", result);
-  //let result = db.update_one(&_id, &new_value);
+  let result = db.find_all(&query);
+  println!("FIND ALL {:?}", result);
+  let result = db.update_one::<MyStruct>(&_id, new_value);
   println!("FIND ONE UPDATED {:?}", result);
-  // let result = db.update_all(&query, &new_value);
-  // println!("UPDATE ALL {:?}", result);
+
+  let result = db.delete_one(&_id);
+  println!("FIND ONE DELETED {:?}", result);
+  let result = db.update_all(&query, new_value2);
+  println!("UPDATE ALL {:?}", result);
 
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();

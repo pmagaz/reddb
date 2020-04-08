@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::fmt;
+use std::fmt::{Debug, Display};
 use uuid::Uuid;
 
 use super::status::Status;
@@ -9,6 +10,15 @@ pub struct Record<T> {
   pub _id: Uuid,
   pub data: T,
   pub status: Status,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Empty;
+
+impl fmt::Display for Empty {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "({})", self)
+  }
 }
 
 impl<'a, T> Record<T>
