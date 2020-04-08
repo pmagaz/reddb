@@ -33,8 +33,8 @@ fn main() {
   println!("FIND_ONE {:?}", result);
   // let result = db.find_all(&query);
   // println!("FIND ALL {:?}", result);
-  // let result = db.update_one(&_id, &new_value);
-  // println!("FIND ONE UPDATED {:?}", result);
+  //let result = db.update_one(&_id, &new_value);
+  println!("FIND ONE UPDATED {:?}", result);
   // let result = db.update_all(&query, &new_value);
   // println!("UPDATE ALL {:?}", result);
 

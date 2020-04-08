@@ -18,9 +18,7 @@ use storage::Storage;
 
 pub use deserializer::DeSerializer;
 pub use json::JsonSerializer;
-
-type ByteString = Vec<u8>;
-type ByteStr = [u8];
+use status::Status;
 
 #[derive(Debug)]
 pub struct RedDb<DS> {
@@ -43,22 +41,19 @@ where
 
   pub fn insert<T>(&self, value: T) -> Uuid
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + Clone + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
   {
     let mut store = self.store.to_write();
     let id = Uuid::new_v4();
     let data = self.serializer.serializer(&value);
-    let record = Record::new(id, value);
-    let bu = self.serializer.serializer(&record);
-
-    &self.storage.write(&bu);
     let _result = store.insert(id, Mutex::new(data));
+    self.persist(id, value, Status::default());
     id
   }
 
   pub fn find_one<T>(&self, id: &Uuid) -> T
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + Clone + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
   {
     let store = self.store.to_read();
     let value = store.get(&id).unwrap();
@@ -66,14 +61,17 @@ where
     self.serializer.deserializer(&*guard)
   }
 
-  // pub fn update_one(&'a self, id: &Uuid, new_value: &'a T) -> &T {
-  //   let mut store = self.store.to_write();
-  //   let value = store.get_mut(&id).unwrap();
-  //   let mut guard = value.lock().unwrap();
-  //   let leches = new_value.to_owned();
-  //   *guard = leches;
-  //   new_value
-  // }
+  pub fn update_one<T>(&'a self, id: &Uuid, new_value: &'a T) -> &T
+  where
+    for<'de> &'a T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+  {
+    let mut store = self.store.to_write();
+    let value = store.get_mut(&id).unwrap();
+    let mut guard = value.lock().unwrap();
+    *guard = self.serializer.serializer(&*guard);
+    self.persist(id.to_owned(), new_value, Status::Updated);
+    new_value
+  }
 
   // pub fn delete_one(&self, id: &Uuid) -> T {
   //   let mut store = self.store.to_write();
@@ -119,4 +117,13 @@ where
   //     .collect();
   //   12
   // }
+
+  pub fn persist<T>(&self, id: Uuid, data: T, status: Status)
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
+  {
+    let record = Record::new(id, data, status);
+    let serialized = self.serializer.serializer(&record);
+    &self.storage.write(&serialized);
+  }
 }

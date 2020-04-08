@@ -13,13 +13,13 @@ pub struct Record<T> {
 
 impl<'a, T> Record<T>
 where
-  T: Clone + Serialize + Deserialize<'a> + Debug,
+  T: Serialize + Deserialize<'a> + Debug,
 {
-  pub fn new(id: Uuid, value: T) -> Self {
+  pub fn new(id: Uuid, value: T, status: Status) -> Self {
     Self {
       _id: id,
       data: value,
-      status: Status::default(),
+      status: status,
     }
   }
 }

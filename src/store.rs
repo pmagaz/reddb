@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
-pub type RDHM = HashMap<Uuid, Mutex<Vec<u8>>>;
+type ByteString = Vec<u8>;
+type ByteStr = [u8];
+pub type RDHM = HashMap<Uuid, Mutex<ByteString>>;
 pub type Read<'a> = RwLockReadGuard<'a, RDHM>;
 pub type Write<'a> = RwLockWriteGuard<'a, RDHM>;
 
@@ -19,12 +21,12 @@ impl Store {
     }
   }
 
-  pub fn to_read(&self) -> RwLockReadGuard<RDHM> {
+  pub fn to_read(&self) -> Read {
     let read = self.data.read().unwrap();
     read
   }
 
-  pub fn to_write(&self) -> RwLockWriteGuard<RDHM> {
+  pub fn to_write(&self) -> Write {
     let write = self.data.write().unwrap();
     write
   }
