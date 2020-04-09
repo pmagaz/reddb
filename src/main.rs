@@ -26,6 +26,9 @@ fn main() {
   let new_value2 = MyStruct {
     foo: String::from("new Value"),
   };
+  let new_value3 = MyStruct {
+    foo: String::from("new Value3"),
+  };
   let db = RedDb::<JsonSerializer>::new();
   let _id = db.insert_one(query.clone());
   let _id = db.insert_one(String::from("hola"));
@@ -42,6 +45,9 @@ fn main() {
   let result = db.delete_one(&_id);
   println!("FIND ONE DELETED {:?}", result);
   let result = db.update_all(&query, new_value2);
+  println!("UPDATE ALL {:?}", result);
+
+  let result = db.update_all(&query, new_value3);
   println!("UPDATE ALL {:?}", result);
 
   // println!("JSON STRINGS");

@@ -38,6 +38,12 @@ where
     }
   }
 
+  /*
+   TODO
+   - funcs to store
+   - status to operation
+  */
+
   pub fn insert_one<T>(&self, value: T) -> Uuid
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
@@ -46,7 +52,7 @@ where
     let id = Uuid::new_v4();
     let data = self.serializer.serializer(&value);
     let _result = store.insert(id, Mutex::new(data));
-    self.persist(id, value, Status::default());
+    self.persist_one(id, value, Status::default());
     id
   }
 
@@ -68,14 +74,14 @@ where
     let value = store.get_mut(&id).unwrap();
     let mut guard = value.lock().unwrap();
     *guard = self.serializer.serializer(&*guard);
-    self.persist(*id, new_value, Status::Updated);
+    self.persist_one(*id, new_value, Status::Updated);
     id.to_owned()
   }
 
   pub fn delete_one(&self, id: &Uuid) -> Uuid {
     let mut store = self.store.to_write();
     let _result = store.remove(id).unwrap();
-    self.persist::<Empty>(*id, Empty, Status::Deleted);
+    self.persist_one::<Empty>(*id, Empty, Status::Deleted);
     id.to_owned()
   }
 
@@ -99,52 +105,58 @@ where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
     let mut store = self.store.to_write();
-    let ser_query = self.serializer.serializer(query);
-    //let serialized = self.serializer.serializer(&new_value);
-    // let arrUpdate: Vec<Vec<u8>> = vec![];
-    let docs: Vec<Vec<u8>> = store
+    let serialized = self.serializer.serializer(query);
+
+    let docs: Vec<(Uuid, T, Status)> = store
       .iter_mut()
-      .map(|(_id, value)| value.lock().unwrap())
-      .filter(|value| **value == ser_query)
-      .map(|mut guard| {
-        let serialized = self.serializer.serializer(&new_value);
-        *guard = serialized;
-        serialized
+      .map(|(_id, value)| (_id, value.lock().unwrap()))
+      .filter(|(_id, value)| **value == serialized)
+      .map(|(_id, mut value)| {
+        *value = self.serializer.serializer(&new_value);
+        //FIXME
+        (*_id, new_value.clone(), Status::Updated)
       })
       .collect();
-    let mut arrUpdate: Vec<&Vec<u8>> = vec![];
-    for x in &mut *store {
-      let (_id, value) = x;
-      let mut guard = value.lock().unwrap();
-      if *guard == ser_query {
-        *guard = self.serializer.serializer(&new_value);
-        arrUpdate.push(serialized);
-      }
-      println!("ALLL {:?}", value);
-    }
-    // .map(|mut value| {
-    //   *value = serialized;
-    //   //     *guard = updated;
-    //   //let updated = self.serializer.serializer(&*value);
-    //   // *value = updated;
-    //   // *updated
-    //   *value
-    // })
-    // .map(|(_id, value)| {
-    //   let mut guard = value.lock().unwrap();
-    //   if *guard == serialized {
-    //     //*guard = new_value.to_owned();
-    //     let updated = self.serializer.serializer(&*guard);
-    //     *guard = updated;
-    //     // arrUpdate.push(updated);
-    //   }
-    // })
-    //.collect();
-    //12
-    docs.len()
+    let result = docs.len();
+    self.persist_many(docs);
+    result
   }
 
-  pub fn persist<T>(&self, id: Uuid, data: T, status: Status)
+  // pub fn delete_all<T>(&self, query: &T, new_value: T) -> usize
+  // where
+  //   for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  // {
+  //   let mut store = self.store.to_write();
+  //   let serialized = self.serializer.serializer(query);
+
+  //   let docs: Vec<(Uuid, T, Status)> = store
+  //     .iter_mut()
+  //     .map(|(_id, value)| (_id, value.lock().unwrap()))
+  //     .filter(|(_id, value)| **value == serialized)
+  //     .map(|(id, mut value)| {
+  //       let _result = store.remove(id).unwrap();
+  //       *value = self.serializer.serializer(&new_value);
+  //       (*id, new_value.clone(), Status::Updated)
+  //     })
+  //     .collect();
+  //   let result = docs.len();
+  //   self.persist_all(docs);
+  //   result
+  // }
+
+  pub fn persist_many<T>(&self, docs: Vec<(Uuid, T, Status)>)
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
+  {
+    let serialized: Vec<u8> = docs
+      .into_iter()
+      .map(|(id, value, status)| Record::new(id, value, status))
+      .flat_map(|record| self.serializer.serializer(&record))
+      .collect();
+    &self.storage.write(&serialized);
+  }
+
+  pub fn persist_one<T>(&self, id: Uuid, data: T, status: Status)
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
   {
