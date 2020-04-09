@@ -47,8 +47,16 @@ fn main() {
   let result = db.update_all(&query, new_value2);
   println!("UPDATE ALL {:?}", result);
 
-  let result = db.update_all(&query, new_value3);
+  let result = db.update_all(&query, new_value3.clone());
   println!("UPDATE ALL {:?}", result);
+
+  let another = MyStruct {
+    foo: String::from("22"),
+  };
+  let id = db.insert_one(another.clone());
+  let id = db.insert_one(another.clone());
+  let result = db.delete_all(&another);
+  println!("DELETE ALL {:?}", result);
 
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();

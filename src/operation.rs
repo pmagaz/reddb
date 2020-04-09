@@ -1,15 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Deserialize)]
-pub enum Status {
-    Created,
-    Deleted,
-    Updated,
-    NotSaved,
+pub enum Operation {
+    Insert,
+    Delete,
+    Update,
 }
 
-impl Default for Status {
+impl Default for Operation {
     fn default() -> Self {
-        Status::Created
+        Operation::Insert
     }
 }

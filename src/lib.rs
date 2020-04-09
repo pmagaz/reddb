@@ -1,23 +1,38 @@
 use core::fmt::Display;
+use operation::Operation;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::result;
 use std::sync::Mutex;
+use std::sync::{MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use storage::Storage;
 use uuid::Uuid;
 
-mod document;
 mod record;
 mod store;
 use record::{Empty, Record};
 use store::Store;
 mod deserializer;
 mod json;
-mod status;
+mod operation;
 mod storage;
-use storage::Storage;
-
 pub use deserializer::DeSerializer;
 pub use json::JsonSerializer;
-use status::Status;
+
+type ByteString = Vec<u8>;
+type WriteOps<T> = Vec<(Uuid, T, Operation)>;
+
+/*
+ TODO
+ - Change to references in search
+ - Add Ron and Yaml encoders
+ - Unwraps and error handing
+ - Rebuild Db
+ - Configuration
+ - Test
+ - Benches
+*/
 
 #[derive(Debug)]
 pub struct RedDb<DS> {
@@ -38,21 +53,40 @@ where
     }
   }
 
-  /*
-   TODO
-   - funcs to store
-   - status to operation
-  */
+  pub fn insert_key(&self, id: Uuid, data: ByteString) -> Option<Mutex<ByteString>> {
+    let mut store = self.store.to_write();
+    store.insert(id, Mutex::new(data))
+  }
+
+  pub fn delete_key(&self, id: &Uuid) -> Mutex<ByteString> {
+    let mut store = self.store.to_write();
+    let result = store.remove(id).unwrap();
+    result
+  }
+
+  pub fn find_keys<T>(&self, search: &T) -> Vec<Uuid>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  {
+    let store = self.store.to_read();
+    let serialized = self.serializer.serializer(search);
+    let docs: Vec<Uuid> = store
+      .iter()
+      .map(|(_id, value)| (_id, value.lock().unwrap()))
+      .filter(|(_id, value)| **value == serialized)
+      .map(|(id, _value)| *id)
+      .collect();
+    docs
+  }
 
   pub fn insert_one<T>(&self, value: T) -> Uuid
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
   {
-    let mut store = self.store.to_write();
     let id = Uuid::new_v4();
     let data = self.serializer.serializer(&value);
-    let _result = store.insert(id, Mutex::new(data));
-    self.persist_one(id, value, Status::default());
+    let _result = self.insert_key(id, data);
+    self.persist_one(id, value, Operation::default());
     id
   }
 
@@ -74,23 +108,23 @@ where
     let value = store.get_mut(&id).unwrap();
     let mut guard = value.lock().unwrap();
     *guard = self.serializer.serializer(&*guard);
-    self.persist_one(*id, new_value, Status::Updated);
+    self.persist_one(*id, new_value, Operation::Update);
     id.to_owned()
   }
 
   pub fn delete_one(&self, id: &Uuid) -> Uuid {
     let mut store = self.store.to_write();
     let _result = store.remove(id).unwrap();
-    self.persist_one::<Empty>(*id, Empty, Status::Deleted);
+    self.persist_one(*id, Empty, Operation::Delete);
     id.to_owned()
   }
 
-  pub fn find_all<T>(&self, query: &T) -> Vec<T>
+  pub fn find_all<T>(&self, search: &T) -> Vec<T>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
     let store = self.store.to_read();
-    let serialized = self.serializer.serializer(query);
+    let serialized = self.serializer.serializer(search);
     let docs: Vec<T> = store
       .iter()
       .map(|(_id, value)| value.lock().unwrap())
@@ -100,51 +134,46 @@ where
     docs
   }
 
-  pub fn update_all<T>(&self, query: &T, new_value: T) -> usize
+  pub fn update_all<T>(&self, search: &T, new_value: T) -> usize
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
     let mut store = self.store.to_write();
-    let serialized = self.serializer.serializer(query);
+    let serialized = self.serializer.serializer(search);
 
-    let docs: Vec<(Uuid, T, Status)> = store
+    let docs: WriteOps<T> = store
       .iter_mut()
       .map(|(_id, value)| (_id, value.lock().unwrap()))
       .filter(|(_id, value)| **value == serialized)
       .map(|(_id, mut value)| {
         *value = self.serializer.serializer(&new_value);
         //FIXME
-        (*_id, new_value.clone(), Status::Updated)
+        (*_id, new_value.clone(), Operation::Update)
       })
       .collect();
     let result = docs.len();
-    self.persist_many(docs);
+    self.persist_all(docs);
     result
   }
 
-  // pub fn delete_all<T>(&self, query: &T, new_value: T) -> usize
-  // where
-  //   for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  // {
-  //   let mut store = self.store.to_write();
-  //   let serialized = self.serializer.serializer(query);
+  pub fn delete_all<T>(&self, search: &T) -> usize
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  {
+    let keys = self.find_keys(search);
+    let docs: WriteOps<Empty> = keys
+      .iter()
+      .map(|id| {
+        self.delete_key(id);
+        (*id, Empty, Operation::Delete)
+      })
+      .collect();
+    let result = docs.len();
+    self.persist_all(docs);
+    result
+  }
 
-  //   let docs: Vec<(Uuid, T, Status)> = store
-  //     .iter_mut()
-  //     .map(|(_id, value)| (_id, value.lock().unwrap()))
-  //     .filter(|(_id, value)| **value == serialized)
-  //     .map(|(id, mut value)| {
-  //       let _result = store.remove(id).unwrap();
-  //       *value = self.serializer.serializer(&new_value);
-  //       (*id, new_value.clone(), Status::Updated)
-  //     })
-  //     .collect();
-  //   let result = docs.len();
-  //   self.persist_all(docs);
-  //   result
-  // }
-
-  pub fn persist_many<T>(&self, docs: Vec<(Uuid, T, Status)>)
+  pub fn persist_all<T>(&self, docs: Vec<(Uuid, T, Operation)>)
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
   {
@@ -156,7 +185,7 @@ where
     &self.storage.write(&serialized);
   }
 
-  pub fn persist_one<T>(&self, id: Uuid, data: T, status: Status)
+  pub fn persist_one<T>(&self, id: Uuid, data: T, status: Operation)
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
   {
