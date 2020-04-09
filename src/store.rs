@@ -1,9 +1,12 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::io::{Error, ErrorKind};
+use std::result;
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
 type ByteString = Vec<u8>;
-type ByteStr = [u8];
+pub type Result<T> = result::Result<T, std::io::Error>;
+
 pub type RDHM = HashMap<Uuid, Mutex<ByteString>>;
 pub type Read<'a> = RwLockReadGuard<'a, RDHM>;
 pub type Write<'a> = RwLockWriteGuard<'a, RDHM>;
