@@ -32,9 +32,26 @@ impl<'a, DS> Store<DS>
 where
   for<'de> DS: DeSerializer<'de> + Debug + Clone,
 {
-  pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-    let hm = HashMap::new();
+  pub fn new<S, P>(path: P, des: S) -> Self
+  where
+    P: AsRef<Path>,
+    for<'de> S: DeSerializer<'de> + Debug + Clone,
+  {
+    let mut hm: RDHM = HashMap::new();
+    //des.serializer(val: &T)
 
+    let storage = Storage::new(path).unwrap();
+    let mut buf = Vec::new();
+    storage.read_content(&mut buf);
+
+    for (_index, content) in buf.lines().enumerate() {
+      let line = content.unwrap();
+      let leches = line.as_bytes();
+      //let record : Record = des.from_str(line);
+      //println!("{:}", des.from(leches));
+      //des.serializer(line);
+    }
+    //DS::deserializer(line);
     // for (_index, line) in buf.lines().enumerate() {
     // let content = &line.unwrap();
     // let json_doc: JsonDocument = serde_json::from_str(content)?;
@@ -49,18 +66,48 @@ where
     // map.insert(_id, doc);
     //}
 
-    let storage = OpenOptions::new()
-      .read(true)
-      .append(true)
-      .create(true)
-      .open(&path)?;
+    // let storage = OpenOptions::new()
+    //   .read(true)
+    //   .append(true)
+    //   .create(true)
+    //   .open(&path)?;
 
-    Ok(Self {
+    Self {
       store: RwLock::new(hm),
-      storage: Storage::new(path).unwrap(),
+      storage: storage,
       serializer: DS::default(),
-    })
+    }
   }
+
+  // pub fn load(&self) -> Result<Self> {
+  //   //let storage = Storage::new(path).unwrap();
+  //   let mut buf = Vec::new();
+  //   self.storage.read_content(&mut buf);
+
+  //   for (_index, content) in buf.lines().enumerate() {
+  //     let line = &content.unwrap();
+  //     println!("{:}", line);
+  //     //DS::deserializer(line);
+  //     //dese
+  //     //DS::deserializer(line);
+  //     //let record: Record = self.serializer.deserializer(line);
+  //     // let json_doc: JsonDocument = serde_json::from_str(content)?;
+  //     // let _id = match &json_doc._id.as_str() {
+  //     //   Some(_id) => Uuid::parse_str(_id).unwrap(),
+  //     //   None => panic!("ERR: Wrong Uuid format!"),
+  //     // };
+  //     // let doc = Document {
+  //     //   store: json_doc.store,
+  //     //   status: Status::Saved,
+  //     // };
+  //     // map.insert(_id, doc);
+  //   }
+  //   Ok(Self {
+  //     store: self.store,
+  //     storage: self.storage,
+  //     serializer: self.serializer,
+  //   })
+  // }
 
   pub fn to_read(&'a self) -> RwLockReadGuard<'a, RDHM> {
     let read = self.store.read().unwrap();
@@ -88,6 +135,7 @@ where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
     let store = self.to_read();
+    //self::DeSerializer::deserializer()
     let serialized = self.serializer.serializer(search);
     let docs: Vec<Uuid> = store
       .iter()

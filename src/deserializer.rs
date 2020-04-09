@@ -11,4 +11,8 @@ pub trait DeSerializer<'a>: Default + Clone // where
   fn deserializer<T>(&self, val: &Vec<u8>) -> T
   where
     for<'de> T: Serialize + Deserialize<'de>;
+
+  fn from_str<T>(&self, val: String) -> T
+  where
+    for<'de> T: Serialize + Deserialize<'de>;
 }
