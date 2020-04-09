@@ -26,6 +26,7 @@ type WriteOps<T> = Vec<(Uuid, T, Operation)>;
 /*
  TODO
  - Change to references in search
+ - Add insert all
  - Add Ron and Yaml encoders
  - Unwraps and error handing
  - Rebuild Db
@@ -119,7 +120,25 @@ where
     id.to_owned()
   }
 
-  pub fn find_all<T>(&self, search: &T) -> Vec<T>
+  pub fn insert<T>(&self, values: Vec<T>) -> usize
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+  {
+    let docs: WriteOps<T> = values
+      .iter()
+      .map(|value| {
+        let id = Uuid::new_v4();
+        let serialized = self.serializer.serializer(value);
+        let _result = self.insert_key(id, serialized);
+        (id, value.clone(), Operation::Insert)
+      })
+      .collect();
+    let result = docs.len();
+    self.persist(docs);
+    result
+  }
+
+  pub fn find<T>(&self, search: &T) -> Vec<T>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
@@ -134,7 +153,7 @@ where
     docs
   }
 
-  pub fn update_all<T>(&self, search: &T, new_value: T) -> usize
+  pub fn update<T>(&self, search: &T, new_value: &T) -> usize
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
@@ -146,17 +165,16 @@ where
       .map(|(_id, value)| (_id, value.lock().unwrap()))
       .filter(|(_id, value)| **value == serialized)
       .map(|(_id, mut value)| {
-        *value = self.serializer.serializer(&new_value);
-        //FIXME
+        *value = self.serializer.serializer(new_value);
         (*_id, new_value.clone(), Operation::Update)
       })
       .collect();
     let result = docs.len();
-    self.persist_all(docs);
+    self.persist(docs);
     result
   }
 
-  pub fn delete_all<T>(&self, search: &T) -> usize
+  pub fn delete<T>(&self, search: &T) -> usize
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
   {
@@ -169,15 +187,15 @@ where
       })
       .collect();
     let result = docs.len();
-    self.persist_all(docs);
+    self.persist(docs);
     result
   }
 
-  pub fn persist_all<T>(&self, docs: Vec<(Uuid, T, Operation)>)
+  pub fn persist<T>(&self, docs: Vec<(Uuid, T, Operation)>)
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
   {
-    let serialized: Vec<u8> = docs
+    let serialized: ByteString = docs
       .into_iter()
       .map(|(id, value, status)| Record::new(id, value, status))
       .flat_map(|record| self.serializer.serializer(&record))
