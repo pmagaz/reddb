@@ -12,6 +12,13 @@ pub struct Record<T> {
   pub status: Operation,
 }
 
+#[derive(Debug, Serialize)]
+pub struct Record2<'a> {
+  // pub _id: Uuid,
+  pub data: &'a Vec<u8>,
+  // pub status: Operation,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Empty;
 
