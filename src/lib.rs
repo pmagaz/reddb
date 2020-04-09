@@ -18,7 +18,6 @@ pub use json::JsonSerializer;
 /*
  TODO
  - Change to references in search
- - Add insert all
  - Add Ron and Yaml encoders
  - Unwraps and error handing
  - Rebuild Db
@@ -35,10 +34,11 @@ pub struct RedDb<DS> {
 impl<'a, DS> RedDb<DS>
 where
   for<'de> DS: DeSerializer<'de> + Debug + Clone,
+  //for<'de> R: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
 {
   pub fn new() -> Self {
     Self {
-      store: Store::new(".db").unwrap(),
+      store: Store::new(".db", DS::default()),
     }
   }
 

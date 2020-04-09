@@ -29,4 +29,10 @@ impl<'a> DeSerializer<'a> for Json {
   {
     serde_json::from_slice::<T>(value).unwrap()
   }
+  fn from_str<T>(&self, value: String) -> T
+  where
+    for<'de> T: Serialize + Deserialize<'de>,
+  {
+    serde_json::from_str::<T>(&value).unwrap()
+  }
 }
