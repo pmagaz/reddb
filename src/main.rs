@@ -4,7 +4,7 @@ extern crate reddb;
 use reddb::{JsonSerializer, RedDb};
 
 fn main() {
-  #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
+  #[derive(Clone, Debug, Default, Serialize, PartialEq, Deserialize)]
   struct MyStruct {
     foo: String,
   }
@@ -29,15 +29,15 @@ fn main() {
   let new_value3 = MyStruct {
     foo: String::from("new Value3"),
   };
-  let db = RedDb::<JsonSerializer>::new();
+  let db = RedDb::<MyStruct, JsonSerializer>::new();
   let _id = db.insert_one(query.clone());
-  let _id = db.insert_one(String::from("hola"));
+  //let _id = db.insert_one(String::from("hola"));
   let id = db.insert_one(MyStruct {
     foo: String::from("holaa"),
   });
-  let result = db.find_one::<MyStruct>(&id);
+  let result = db.find_one(&id);
   println!("FIND_ONE {:?}", result);
-  let result = db.find(&query);
+  //let result = db.find(&query);
   println!("FIND ALL {:?}", result);
   let result = db.update_one(&_id, new_value);
   println!("FIND ONE UPDATED {:?}", result);
@@ -60,7 +60,7 @@ fn main() {
 
   let arr = vec![another.clone(), another.clone()];
   let result = db.insert(arr);
-  println!("INSERT {:?}", result);
+  // println!("INSERT {:?}", result);
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();
   // let query = r#"

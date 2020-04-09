@@ -1,18 +1,16 @@
 use super::deserializer::DeSerializer;
 use super::operation::Operation;
-use super::record::{Empty, Record};
+use super::record::Record;
 use super::storage::Storage;
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::io::{BufRead, Seek, SeekFrom, Write};
+use std::io::BufRead;
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::result;
-use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
 
 type ByteString = Vec<u8>;
@@ -22,92 +20,43 @@ pub type Result<T> = result::Result<T, std::io::Error>;
 pub type RDHM = HashMap<Uuid, Mutex<ByteString>>;
 
 #[derive(Debug)]
-pub struct Store<DS> {
+pub struct Store<T, DS> {
   pub store: RwLock<RDHM>,
   pub storage: Storage,
   pub serializer: DS,
+  pub record: T,
 }
 
-impl<'a, DS> Store<DS>
+impl<'a, T, DS> Store<T, DS>
 where
+  for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + Display + Default + PartialEq,
   for<'de> DS: DeSerializer<'de> + Debug + Clone,
 {
-  pub fn new<S, P>(path: P, des: S) -> Self
+  pub fn new<P>(path: P) -> Self
   where
     P: AsRef<Path>,
-    for<'de> S: DeSerializer<'de> + Debug + Clone,
   {
-    let mut hm: RDHM = HashMap::new();
-    //des.serializer(val: &T)
-
+    let deser = DS::default();
+    let mut map: RDHM = HashMap::new();
     let storage = Storage::new(path).unwrap();
     let mut buf = Vec::new();
     storage.read_content(&mut buf);
 
     for (_index, content) in buf.lines().enumerate() {
       let line = content.unwrap();
-      let leches = line.as_bytes();
-      //let record : Record = des.from_str(line);
-      //println!("{:}", des.from(leches));
-      //des.serializer(line);
+      let leches = &line.into_bytes();
+      let record: Record<T> = deser.deserializer(leches);
+      let serialized = deser.serializer(&record.data);
+      map.insert(record._id, Mutex::new(serialized));
     }
-    //DS::deserializer(line);
-    // for (_index, line) in buf.lines().enumerate() {
-    // let content = &line.unwrap();
-    // let json_doc: JsonDocument = serde_json::from_str(content)?;
-    // let _id = match &json_doc._id.as_str() {
-    //   Some(_id) => Uuid::parse_str(_id).unwrap(),
-    //   None => panic!("ERR: Wrong Uuid format!"),
-    // };
-    // let doc = Document {
-    //   store: json_doc.store,
-    //   status: Status::Saved,
-    // };
-    // map.insert(_id, doc);
-    //}
-
-    // let storage = OpenOptions::new()
-    //   .read(true)
-    //   .append(true)
-    //   .create(true)
-    //   .open(&path)?;
 
     Self {
-      store: RwLock::new(hm),
+      store: RwLock::new(map),
       storage: storage,
       serializer: DS::default(),
+      record: T::default(),
     }
   }
-
-  // pub fn load(&self) -> Result<Self> {
-  //   //let storage = Storage::new(path).unwrap();
-  //   let mut buf = Vec::new();
-  //   self.storage.read_content(&mut buf);
-
-  //   for (_index, content) in buf.lines().enumerate() {
-  //     let line = &content.unwrap();
-  //     println!("{:}", line);
-  //     //DS::deserializer(line);
-  //     //dese
-  //     //DS::deserializer(line);
-  //     //let record: Record = self.serializer.deserializer(line);
-  //     // let json_doc: JsonDocument = serde_json::from_str(content)?;
-  //     // let _id = match &json_doc._id.as_str() {
-  //     //   Some(_id) => Uuid::parse_str(_id).unwrap(),
-  //     //   None => panic!("ERR: Wrong Uuid format!"),
-  //     // };
-  //     // let doc = Document {
-  //     //   store: json_doc.store,
-  //     //   status: Status::Saved,
-  //     // };
-  //     // map.insert(_id, doc);
-  //   }
-  //   Ok(Self {
-  //     store: self.store,
-  //     storage: self.storage,
-  //     serializer: self.serializer,
-  //   })
-  // }
 
   pub fn to_read(&'a self) -> RwLockReadGuard<'a, RDHM> {
     let read = self.store.read().unwrap();
@@ -130,12 +79,8 @@ where
     result
   }
 
-  pub fn find_keys<T>(&self, search: &T) -> Vec<Uuid>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn find_keys(&self, search: &T) -> Vec<Uuid> {
     let store = self.to_read();
-    //self::DeSerializer::deserializer()
     let serialized = self.serializer.serializer(search);
     let docs: Vec<Uuid> = store
       .iter()
@@ -146,30 +91,21 @@ where
     docs
   }
 
-  pub fn insert_one<T>(&self, value: &T) -> Uuid
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
+  pub fn insert_one(&self, value: &T) -> Uuid {
     let id = Uuid::new_v4();
     let data = self.serializer.serializer(value);
     let _result = self.insert_key(id, data);
     id
   }
 
-  pub fn find_one<T>(&self, id: &Uuid) -> T
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
+  pub fn find_one(&self, id: &Uuid) -> T {
     let store = self.to_read();
     let value = store.get(&id).unwrap();
     let guard = value.lock().unwrap();
     self.serializer.deserializer(&*guard)
   }
 
-  pub fn update_one<T>(&'a self, id: &Uuid, new_value: &T) -> Uuid
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn update_one(&'a self, id: &Uuid, new_value: &T) -> Uuid {
     let mut store = self.to_write();
     let value = store.get_mut(&id).unwrap();
     let mut guard = value.lock().unwrap();
@@ -177,32 +113,27 @@ where
     id.to_owned()
   }
 
-  pub fn delete_one(&self, id: &Uuid) -> Uuid {
+  pub fn delete_one(&self, id: &Uuid) -> T {
     let mut store = self.to_write();
-    let _result = store.remove(id).unwrap();
-    id.to_owned()
+    let result = store.remove(id).unwrap();
+    let guard = result.lock().unwrap();
+    self.serializer.deserializer(&guard)
   }
 
-  pub fn insert<T>(&self, values: Vec<T>) -> WriteOps<T>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn insert(&self, values: Vec<T>) -> WriteOps<T> {
     let docs: WriteOps<T> = values
-      .iter()
+      .into_iter()
       .map(|value| {
         let id = Uuid::new_v4();
-        let serialized = self.serializer.serializer(value);
+        let serialized = self.serializer.serializer(&value);
         let _result = self.insert_key(id, serialized);
-        (id, value.clone(), Operation::Insert)
+        (id, value, Operation::Insert)
       })
       .collect();
     docs
   }
 
-  pub fn find<T>(&self, search: &T) -> Vec<T>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn find(&self, search: &T) -> Vec<T> {
     let store = self.to_read();
     let serialized = self.serializer.serializer(search);
     let docs: Vec<T> = store
@@ -214,10 +145,7 @@ where
     docs
   }
 
-  pub fn update<T>(&self, search: &T, new_value: &T) -> WriteOps<T>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn update(&self, search: &T, new_value: &T) -> WriteOps<T> {
     let mut store = self.to_write();
     let serialized = self.serializer.serializer(search);
 
@@ -233,38 +161,29 @@ where
     docs
   }
 
-  pub fn delete<T>(&self, search: &T) -> WriteOps<Empty>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
-  {
+  pub fn delete(&self, search: &T) -> WriteOps<T> {
     let keys = self.find_keys(search);
-    let docs: WriteOps<Empty> = keys
+    let docs: WriteOps<T> = keys
       .iter()
       .map(|id| {
-        self.delete_key(id);
-        (*id, Empty, Operation::Delete)
+        let value = self.delete_one(id);
+        (*id, value, Operation::Delete)
       })
       .collect();
     docs
   }
 
-  pub fn persist<T>(&self, docs: Vec<(Uuid, T, Operation)>)
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
-  {
+  pub fn persist(&self, docs: Vec<(Uuid, T, Operation)>) {
     let serialized: ByteString = docs
       .into_iter()
-      .map(|(id, value, status)| Record::new(id, value, status))
+      .map(|(id, value, operation)| Record::new(id, value, operation))
       .flat_map(|record| self.serializer.serializer(&record))
       .collect();
     &self.storage.write(&serialized);
   }
 
-  pub fn persist_one<T>(&self, id: Uuid, data: T, status: Operation)
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display,
-  {
-    let record = Record::new(id, data, status);
+  pub fn persist_one(&self, id: Uuid, data: T, operation: Operation) {
+    let record = Record::new(id, data, operation);
     let serialized = self.serializer.serializer(&record);
     &self.storage.write(&serialized);
   }

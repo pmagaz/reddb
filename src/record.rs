@@ -9,34 +9,18 @@ use super::operation::Operation;
 pub struct Record<T> {
   pub _id: Uuid,
   pub data: T,
-  pub status: Operation,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Record2<'a> {
-  // pub _id: Uuid,
-  pub data: &'a Vec<u8>,
-  // pub status: Operation,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Empty;
-
-impl fmt::Display for Empty {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "({})", self)
-  }
+  pub operation: Operation,
 }
 
 impl<'a, T> Record<T>
 where
   T: Serialize + Deserialize<'a> + Debug,
 {
-  pub fn new(id: Uuid, value: T, status: Operation) -> Self {
+  pub fn new(id: Uuid, value: T, operation: Operation) -> Self {
     Self {
       _id: id,
       data: value,
-      status: status,
+      operation: operation,
     }
   }
 }
