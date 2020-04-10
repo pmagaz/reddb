@@ -30,37 +30,37 @@ fn main() {
     foo: String::from("new Value3"),
   };
   let db = JSonDb::<MyStruct>::new();
-  // let _id = db.insert_one(query.clone());
-  // //let _id = db.insert_one(String::from("hola"));
-  // let id = db.insert_one(MyStruct {
-  //   foo: String::from("holaa"),
-  // });
-  // let result = db.find_one(&id);
-  // println!("FIND_ONE {:?}", result);
-  // //let result = db.find(&query);
-  // println!("FIND ALL {:?}", result);
-  // let result = db.update_one(&_id, new_value);
-  // println!("FIND ONE UPDATED {:?}", result);
+  let _id = db.insert_one(query.clone());
+  //let _id = db.insert_one(String::from("hola"));
+  let id = db.insert_one(MyStruct {
+    foo: String::from("holaa"),
+  });
+  let result = db.find_one(&id);
+  println!("FIND_ONE {:?}", result);
+  //let result = db.find(&query);
+  println!("FIND ALL {:?}", result);
+  let result = db.update_one(&_id, new_value);
+  println!("FIND ONE UPDATED {:?}", result);
 
-  // let result = db.delete_one(&_id);
-  // println!("FIND ONE DELETED {:?}", result);
-  // let result = db.update(&query, &new_value2);
-  // println!("UPDATE ALL {:?}", result);
+  let result = db.delete_one(&_id);
+  println!("FIND ONE DELETED {:?}", result);
+  let result = db.update(&query, &new_value2);
+  println!("UPDATE ALL {:?}", result);
 
-  // let result = db.update(&query, &new_value3);
-  // println!("UPDATE ALL {:?}", result);
+  let result = db.update(&query, &new_value3);
+  println!("UPDATE ALL {:?}", result);
 
-  // let another = MyStruct {
-  //   foo: String::from("22"),
-  // };
-  // let id = db.insert_one(another.clone());
-  // let id = db.insert_one(another.clone());
-  // let result = db.delete(&another);
-  // println!("DELETE ALL {:?}", result);
+  let another = MyStruct {
+    foo: String::from("22"),
+  };
+  let id = db.insert_one(another.clone());
+  let id = db.insert_one(another.clone());
+  let result = db.delete(&another);
+  println!("DELETE ALL {:?}", result);
 
-  // let arr = vec![another.clone(), another.clone()];
-  // let result = db.insert(arr);
-  // println!("INSERT {:?}", result);
+  let arr = vec![another.clone(), another.clone()];
+  let result = db.insert(arr);
+  println!("INSERT {:?}", result);
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();
   // let query = r#"
