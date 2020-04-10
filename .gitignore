@@ -6,7 +6,7 @@
 .cache
 wasm-pack.log
 .database
-.db
+*.db
 .db.*
 /target
 **/*.rs.bk
