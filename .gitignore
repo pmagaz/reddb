@@ -11,3 +11,5 @@ wasm-pack.log
 /target
 **/*.rs.bk
 *.lock
+Cargo.lock
+
