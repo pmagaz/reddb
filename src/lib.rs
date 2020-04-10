@@ -5,39 +5,29 @@ use std::fmt::Debug;
 use uuid::Uuid;
 
 mod record;
+mod serializer;
 mod store;
 use store::Store;
-mod deserializer;
-mod json;
 mod operation;
 mod storage;
-use deserializer::DeSerializer;
-pub use json::JsonSerializer;
+use serializer::JsonSerializer;
+use serializer::Serializer;
 
-/*
- TODO
- - Clean Db file after load
- - Change to references in search
- - Add Ron and Yaml encoders
- - Unwraps and error handing
- - Configuration
- - Test
- - Benches
-*/
+pub type JSonDb<T> = RedDb<T, JsonSerializer>;
 
 #[derive(Debug)]
-pub struct RedDb<T, DS> {
-  pub store: Store<T, DS>,
+pub struct RedDb<T, SE> {
+  pub store: Store<T, SE>,
 }
 
-impl<'a, T, DS> RedDb<T, DS>
+impl<'a, T, SE> RedDb<T, SE>
 where
   for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Default + Clone,
-  for<'de> DS: DeSerializer<'de> + Debug + Clone,
+  for<'de> SE: Serializer<'de> + Debug + Clone,
 {
   pub fn new() -> Self {
     Self {
-      store: Store::new(".db"),
+      store: Store::new(),
     }
   }
 

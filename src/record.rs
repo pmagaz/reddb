@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use uuid::Uuid;
 
 use super::operation::Operation;
