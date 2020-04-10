@@ -1,15 +1,10 @@
 /target
 /pkg
-.DS_Store
 /.cache
 /src2
 .cache
 wasm-pack.log
-.database
 *.db
-.db.*
-/target
 **/*.rs.bk
 *.lock
 Cargo.lock
-
