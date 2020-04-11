@@ -1,10 +1,9 @@
+use super::{Serializer, Serializers};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
 
-use super::{Serializer, Serializers};
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Json {
   format: Serializers,
 }
