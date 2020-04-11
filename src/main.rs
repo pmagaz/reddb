@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 extern crate reddb;
-use reddb::JSonDb;
 
 fn main() {
   #[derive(Clone, Debug, Default, Serialize, PartialEq, Deserialize)]
@@ -29,7 +28,7 @@ fn main() {
   let new_value3 = MyStruct {
     foo: String::from("new Value3"),
   };
-  let db = JSonDb::<MyStruct>::new();
+  let db = reddb::RonDb::<MyStruct>::new();
   let _id = db.insert_one(query.clone());
   //let _id = db.insert_one(String::from("hola"));
   let id = db.insert_one(MyStruct {
