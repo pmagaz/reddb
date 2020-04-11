@@ -1,14 +1,14 @@
-//use super::file::Storage;
-use super::operation::Operation;
-use super::serializer::{Serializer, Serializers};
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind};
 use std::result;
-use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uuid::Uuid;
+
+use super::operation::Operation;
+use super::serializer::Serializer;
 
 pub type ByteString = Vec<u8>;
 pub type WriteOperation<T> = (Uuid, T, Operation);
@@ -28,71 +28,13 @@ where
   for<'de> T: Serialize + Deserialize<'de> + Debug + Display + Clone + Default + PartialEq,
   for<'de> SE: Serializer<'de> + Debug,
 {
-  pub fn new() -> Self {
-    let serializer = SE::default();
-    let store_name = match serializer.format() {
-      Serializers::Json(st) => st,
-      Serializers::Yaml(st) => st,
-      Serializers::Ron(st) => st,
-    };
-
-    // let storage = Storage::new(store_name).unwrap();
-    // let data: StoreHM = Store::<T, SE>::load_data(&storage, &serializer);
-    // Store::<T, SE>::rebuild(&storage, &serializer, &data).unwrap();
-
-    let data = HashMap::new();
+  pub fn new(data: StoreHM) -> Self {
     Self {
       store: RwLock::new(data),
-      //storage: storage,
-      serializer: serializer,
+      serializer: SE::default(),
       record: T::default(),
     }
   }
-
-  // pub fn rebuild(storage: &Storage, serializer: &SE, data: &StoreHM) -> Result<()> {
-  //   let docs: ByteString = data
-  //     .iter()
-  //     .map(|(id, value)| (id, value.lock().unwrap()))
-  //     .map(|(id, value)| {
-  //       let data: T = serializer.deserialize(&*value);
-  //       Record::new(*id, data, Operation::default())
-  //     })
-  //     .flat_map(|record| serializer.serialize(&record))
-  //     .collect();
-  //   storage.rebuild_storage(&docs);
-  //   Ok(())
-  // }
-
-  // pub fn load_data(storage: &Storage, serializer: &SE) -> StoreHM {
-  //   let mut map: StoreHM = HashMap::new();
-  //   let mut buf = Vec::new();
-  //   storage.read_content(&mut buf);
-
-  //   for (_index, content) in buf.lines().enumerate() {
-  //     let line = content.unwrap();
-  //     let byte_str = &line.into_bytes();
-  //     let record: Record<T> = serializer.deserialize(byte_str);
-  //     let id = record._id;
-  //     let data = record.data;
-  //     match record.operation {
-  //       Operation::Insert => {
-  //         let serialized = serializer.serialize(&data);
-  //         map.insert(id, Mutex::new(serialized));
-  //       }
-  //       Operation::Update => {
-  //         match map.get_mut(&id) {
-  //           Some(value) => {
-  //             let mut guard = value.lock().unwrap();
-  //             *guard = serializer.serialize(&data);
-  //           }
-  //           None => {}
-  //         };
-  //       }
-  //       Operation::Delete => {}
-  //     }
-  //   }
-  //   map
-  // }
 
   pub fn to_read(&'a self) -> RwLockReadGuard<'a, StoreHM> {
     self.store.read().unwrap()
@@ -206,20 +148,4 @@ where
       .collect();
     docs
   }
-
-  // pub fn persist(&self, docs: WriteOperations<T>) -> u8 {
-  //   let result = docs
-  //     .into_iter()
-  //     .map(|(id, value, operation)| Record::new(id, value, operation))
-  //     .flat_map(|record| self.serializer.serialize(&record))
-  //     .collect();
-  //   docs
-  //   //self.storage.append_data(&serialized);
-  // }
-
-  // pub fn persist_one(&self, id: Uuid, data: T, operation: Operation) {
-  //   let record = Record::new(id, data, operation);
-  //   let serialized = self.serializer.serialize(&record);
-  //   // self.storage.append_data(&serialized);
-  // }
 }
