@@ -1,6 +1,8 @@
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{remove_file, File, OpenOptions};
+use std::io::BufRead;
 use std::io::{Error, Read};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
@@ -9,7 +11,8 @@ use std::sync::Mutex;
 use super::Storage;
 use crate::record::Record;
 use crate::serializer::{Serializer, Serializers};
-use crate::store::{Result, WriteOperation, WriteOperations};
+use crate::store::{ByteString, Result, StoreHM, WriteOperation, WriteOperations};
+use crate::Operation;
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -22,24 +25,31 @@ impl<SE> Storage for FileStorage<SE>
 where
     for<'de> SE: Serializer<'de> + Debug,
 {
-    fn new<T>(path: &str) -> Result<Self> {
+    fn new<T>() -> Result<Self> {
+        let serializer = SE::default();
+        let file_name = match serializer.format() {
+            Serializers::Json(st) => st,
+            Serializers::Yaml(st) => st,
+            Serializers::Ron(st) => st,
+        };
         Ok(Self {
             serializer: SE::default(),
-            file_path: path.to_owned(),
+            file_path: file_name.to_owned(),
             db_file: Mutex::new(
                 OpenOptions::new()
                     .read(true)
                     .append(true)
                     .create(true)
-                    .open(Path::new(path))?,
+                    .open(Path::new(file_name))?,
             ),
         })
     }
-    fn save<T>(&self, docs: WriteOperations<T>) -> Result<()>
+
+    fn save<T>(&self, data: WriteOperations<T>) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
-        let serialized: Vec<u8> = docs
+        let serialized: Vec<u8> = data
             .into_iter()
             .map(|(id, value, operation)| Record::new(id, value, operation))
             .flat_map(|record| self.serializer.serialize(&record))
@@ -56,26 +66,47 @@ where
         self.append_data(&serialized);
         Ok(())
     }
+    fn load_data<T>(&self) -> StoreHM
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
+        let mut map: StoreHM = HashMap::new();
+        let mut buf = Vec::new();
+        self.read_content(&mut buf);
+
+        for (_index, content) in buf.lines().enumerate() {
+            let line = content.unwrap();
+            let byte_str = &line.into_bytes();
+            let record: Record<T> = self.serializer.deserialize(byte_str);
+            let id = record._id;
+            let data = record.data;
+            match record.operation {
+                Operation::Insert => {
+                    let serialized = self.serializer.serialize(&data);
+                    map.insert(id, Mutex::new(serialized));
+                }
+                Operation::Update => {
+                    match map.get_mut(&id) {
+                        Some(value) => {
+                            let mut guard = value.lock().unwrap();
+                            *guard = self.serializer.serialize(&data);
+                        }
+                        None => {}
+                    };
+                }
+                Operation::Delete => {}
+            }
+        }
+
+        self.rebuild::<T>(&map).unwrap();
+        map
+    }
 }
 
 impl<SE> FileStorage<SE>
 where
     for<'de> SE: Serializer<'de> + Debug,
 {
-    pub fn new2(path: &str) -> Result<Self> {
-        Ok(Self {
-            serializer: SE::default(),
-            file_path: path.to_owned(),
-            db_file: Mutex::new(
-                OpenOptions::new()
-                    .read(true)
-                    .append(true)
-                    .create(true)
-                    .open(Path::new(path))?,
-            ),
-        })
-    }
-
     fn read_content(&self, mut buf: &mut Vec<u8>) -> usize {
         self.db_file
             .try_lock()
@@ -84,16 +115,27 @@ where
             .unwrap()
     }
 
-    fn rebuild_storage<'a>(&'a self, data: &Vec<u8>) -> bool {
+    pub fn rebuild<T>(&self, data: &StoreHM) -> Result<()>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
         let tmp = ".tmp";
-        //FIXME
+        let data: ByteString = data
+            .iter()
+            .map(|(id, value)| (id, value.lock().unwrap()))
+            .map(|(id, value)| {
+                let data: T = self.serializer.deserialize(&*value);
+                Record::new(*id, data, Operation::default())
+            })
+            .flat_map(|record| self.serializer.serialize(&record))
+            .collect();
+
         if self.storage_exists() {
-            println!("Rebuild");
-            self.replace_data(tmp, data);
-            self.replace_data(&self.file_path, data);
+            self.replace_data(tmp, &data);
+            self.replace_data(&self.file_path, &data);
             remove_file(tmp).unwrap();
         }
-        true
+        Ok(())
     }
 
     fn storage_exists<'a>(&'a self) -> bool {

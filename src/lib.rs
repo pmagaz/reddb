@@ -11,11 +11,11 @@ use store::Store;
 mod operation;
 mod storage;
 
+use serializer::Serializer;
 use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
-//use serializer::RonSerializer;
-use serializer::{Serializer, Serializers};
 use storage::FileStorage;
 use storage::Storage;
+use store::StoreHM;
 
 pub type JSonDb<T> = RedDb<T, JsonSerializer, FileStorage<JsonSerializer>>;
 pub type YamlDb<T> = RedDb<T, YamlSerializer, FileStorage<YamlSerializer>>;
@@ -34,15 +34,12 @@ where
   for<'de> ST: Storage + Debug,
 {
   pub fn new() -> Self {
-    let serializer = SE::default();
-    let store_name = match serializer.format() {
-      Serializers::Json(st) => st,
-      Serializers::Yaml(st) => st,
-      Serializers::Ron(st) => st,
-    };
+    let storage = ST::new::<T>().unwrap();
+    let data: StoreHM = storage.load_data::<T>();
+
     Self {
-      store: Store::new(),
-      storage: ST::new::<T>(store_name).unwrap(),
+      store: Store::new(data),
+      storage: storage,
     }
   }
 
@@ -50,7 +47,7 @@ where
     let id = self.store.insert_one(&value);
     self
       .storage
-      .save_one((id, value, Operation::Delete))
+      .save_one((id, value, Operation::Insert))
       .unwrap();
     id
   }
@@ -63,7 +60,7 @@ where
     let id = self.store.update_one(id, &new_value);
     self
       .storage
-      .save_one((id, new_value, Operation::Delete))
+      .save_one((id, new_value, Operation::Update))
       .unwrap();
     id
   }
