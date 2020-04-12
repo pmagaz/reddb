@@ -9,10 +9,14 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use super::Storage;
+use crate::error::{RdStoreErrorKind, Result};
 use crate::record::Record;
 use crate::serializer::{Serializer, Serializers};
-use crate::store::{ByteString, Result, StoreHM, WriteOperation, WriteOperations};
+use crate::store::{ByteString, StoreHM, WriteOperation, WriteOperations};
 use crate::Operation;
+//pub type Result<T> = std::result::Result<T, std::io::Error>;
+
+//pub type Result<T> = ::std::result::Result<T, std::io::Error>;
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -40,7 +44,8 @@ where
                     .read(true)
                     .append(true)
                     .create(true)
-                    .open(Path::new(file_name))?,
+                    .open(Path::new(file_name))
+                    .map_err(|_| RdStoreErrorKind::Poisoned)?,
             ),
         })
     }
@@ -52,7 +57,7 @@ where
         let serialized: Vec<u8> = data
             .into_iter()
             .map(|(id, value, operation)| Record::new(id, value, operation))
-            .flat_map(|record| self.serializer.serialize(&record))
+            .flat_map(|record| self.serializer.serialize(&record).unwrap())
             .collect();
         self.append_data(&serialized);
         Ok(())
@@ -62,7 +67,7 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
         let record = Record::new(doc.0, doc.1, doc.2);
-        let serialized = self.serializer.serialize(&record);
+        let serialized = self.serializer.serialize(&record).unwrap();
         self.append_data(&serialized);
         Ok(())
     }
@@ -77,19 +82,19 @@ where
         for (_index, content) in buf.lines().enumerate() {
             let line = content.unwrap();
             let byte_str = &line.into_bytes();
-            let record: Record<T> = self.serializer.deserialize(byte_str);
+            let record: Record<T> = self.serializer.deserialize(byte_str).unwrap();
             let id = record._id;
             let data = record.data;
             match record.operation {
                 Operation::Insert => {
-                    let serialized = self.serializer.serialize(&data);
+                    let serialized = self.serializer.serialize(&data).unwrap();
                     map.insert(id, Mutex::new(serialized));
                 }
                 Operation::Update => {
                     match map.get_mut(&id) {
                         Some(value) => {
                             let mut guard = value.lock().unwrap();
-                            *guard = self.serializer.serialize(&data);
+                            *guard = self.serializer.serialize(&data).unwrap();
                         }
                         None => {}
                     };
@@ -124,10 +129,10 @@ where
             .iter()
             .map(|(id, value)| (id, value.lock().unwrap()))
             .map(|(id, value)| {
-                let data: T = self.serializer.deserialize(&*value);
+                let data: T = self.serializer.deserialize(&*value).unwrap();
                 Record::new(*id, data, Operation::default())
             })
-            .flat_map(|record| self.serializer.serialize(&record))
+            .flat_map(|record| self.serializer.serialize(&record).unwrap())
             .collect();
 
         if self.storage_exists() {

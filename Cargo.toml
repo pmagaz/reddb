@@ -1,11 +1,11 @@
 [package]
-name = "reddb"
+name = "rdstore"
 version = "0.1.0"
 authors = ["pmagaz <magazpablo@gmail.com>"]
 edition = "2018"
 
 [lib]
-name = "reddb"
+name = "rdstore"
 path = "src/lib.rs"
 
 [[bin]]
@@ -13,16 +13,11 @@ name = "mybin"
 path = "src/main.rs"
 
 [dependencies]
-iron = "0.6.1"
-mime = "0.3.16"
-router = "0.6.0"
-quick-error = "1.2.3"
-urlencoded = "0.6.0"
-dotenv = "0.15.0"
 uuid = { version = "0.7.4", features = ["serde", "v4"] }
 bincode = "1.2.1"
 serde_json = "1.0.51"
 serde_yaml = "0.8.11"
 ron = "0.5.1"
+failure = "0.1.7"
 dotenv_codegen = "0.15.0"
 serde = { version = "1.0", features = ["derive"] }
