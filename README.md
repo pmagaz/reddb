@@ -1,5 +1,5 @@
-# RedDb
+# RDStore
 
-Rust Embedded Document Database
+Rust Data Store
 
 Work in progress! 

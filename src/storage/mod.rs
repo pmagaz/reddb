@@ -1,4 +1,5 @@
-use crate::store::{Result, StoreHM, WriteOperation, WriteOperations};
+use crate::error::Result;
+use crate::store::{StoreHM, WriteOperation, WriteOperations};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::marker::Sized;

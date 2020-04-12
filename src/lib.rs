@@ -8,18 +8,20 @@ mod record;
 mod serializer;
 mod store;
 use store::Store;
+mod error;
 mod operation;
 mod storage;
 
+use error::Result;
 use serializer::Serializer;
 use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
 use storage::FileStorage;
 use storage::Storage;
 use store::StoreHM;
 
-pub type JSonDb<T> = RedDb<T, JsonSerializer, FileStorage<JsonSerializer>>;
-pub type YamlDb<T> = RedDb<T, YamlSerializer, FileStorage<YamlSerializer>>;
-pub type RonDb<T> = RedDb<T, RonSerializer, FileStorage<RonSerializer>>;
+pub type JSonStore<T> = RedDb<T, JsonSerializer, FileStorage<JsonSerializer>>;
+pub type YamlStore<T> = RedDb<T, YamlSerializer, FileStorage<YamlSerializer>>;
+pub type RonStore<T> = RedDb<T, RonSerializer, FileStorage<RonSerializer>>;
 
 #[derive(Debug)]
 pub struct RedDb<T, SE, ST> {
@@ -43,17 +45,17 @@ where
     }
   }
 
-  pub fn insert_one(&self, value: T) -> Uuid {
-    let id = self.store.insert_one(&value);
+  pub fn insert_one(&self, value: T) -> Result<Uuid> {
+    let id = self.store.insert_one(&value)?;
     self
       .storage
       .save_one((id, value, Operation::Insert))
       .unwrap();
-    id
+    Ok(id)
   }
 
-  pub fn find_one(&self, id: &Uuid) -> T {
-    self.store.find_one(id)
+  pub fn find_one(&self, id: &Uuid) -> Result<T> {
+    Ok(self.store.find_one(id)?)
   }
 
   pub fn update_one(&'a self, id: &Uuid, new_value: T) -> Uuid {

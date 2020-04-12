@@ -1,3 +1,4 @@
+use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
@@ -24,18 +25,18 @@ impl<'a> Serializer<'a> for Yaml {
     &self.format
   }
 
-  fn serialize<T>(&self, value: &T) -> Vec<u8>
+  fn serialize<T>(&self, value: &T) -> Result<Vec<u8>, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let mut vector = serde_yaml::to_vec(value).unwrap();
-    vector.extend("\n".as_bytes());
-    vector
+    let mut vec = serde_yaml::to_vec(value).unwrap();
+    vec.extend("\n".as_bytes());
+    Ok(vec)
   }
-  fn deserialize<T>(&self, value: &Vec<u8>) -> T
+  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    serde_yaml::from_slice::<T>(value).unwrap()
+    Ok(serde_yaml::from_slice::<T>(value).unwrap())
   }
 }
