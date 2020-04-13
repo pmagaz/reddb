@@ -1,9 +1,11 @@
 use core::fmt::Debug;
+use failure::{Error, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{remove_file, File, OpenOptions};
 use std::io::BufRead;
-use std::io::{Error, Read};
+use std::io::Read;
+
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Mutex;
@@ -14,9 +16,6 @@ use crate::record::Record;
 use crate::serializer::{Serializer, Serializers};
 use crate::store::{ByteString, StoreHM, WriteOperation, WriteOperations};
 use crate::Operation;
-//pub type Result<T> = std::result::Result<T, std::io::Error>;
-
-//pub type Result<T> = ::std::result::Result<T, std::io::Error>;
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -45,7 +44,7 @@ where
                     .append(true)
                     .create(true)
                     .open(Path::new(file_name))
-                    .map_err(|_| RdStoreErrorKind::Poisoned)?,
+                    .map_err(|_| RdStoreErrorKind::StorageOpen)?,
             ),
         })
     }
@@ -59,7 +58,8 @@ where
             .map(|(id, value, operation)| Record::new(id, value, operation))
             .flat_map(|record| self.serializer.serialize(&record).unwrap())
             .collect();
-        self.append_data(&serialized);
+        self.append_data(&serialized)
+            .context(RdStoreErrorKind::AppendData)?;
         Ok(())
     }
     fn save_one<T>(&self, doc: WriteOperation<T>) -> Result<()>
@@ -68,21 +68,28 @@ where
     {
         let record = Record::new(doc.0, doc.1, doc.2);
         let serialized = self.serializer.serialize(&record).unwrap();
-        self.append_data(&serialized);
+        self.append_data(&serialized)
+            .context(RdStoreErrorKind::AppendData)?;
         Ok(())
     }
-    fn load_data<T>(&self) -> StoreHM
+    fn load_content<T>(&self) -> Result<StoreHM>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         let mut map: StoreHM = HashMap::new();
         let mut buf = Vec::new();
-        self.read_content(&mut buf);
+        self.read_content(&mut buf)
+            .context(RdStoreErrorKind::ContentLoad)?;
 
         for (_index, content) in buf.lines().enumerate() {
             let line = content.unwrap();
             let byte_str = &line.into_bytes();
-            let record: Record<T> = self.serializer.deserialize(byte_str).unwrap();
+            let record: Record<T> = self
+                .serializer
+                .deserialize(byte_str)
+                .context(RdStoreErrorKind::DataCorruption)
+                .unwrap();
+
             let id = record._id;
             let data = record.data;
             match record.operation {
@@ -94,7 +101,11 @@ where
                     match map.get_mut(&id) {
                         Some(value) => {
                             let mut guard = value.lock().unwrap();
-                            *guard = self.serializer.serialize(&data).unwrap();
+                            *guard = self
+                                .serializer
+                                .serialize(&data)
+                                .context(RdStoreErrorKind::DataCorruption)
+                                .unwrap();
                         }
                         None => {}
                     };
@@ -103,8 +114,9 @@ where
             }
         }
 
-        self.rebuild::<T>(&map).unwrap();
-        map
+        self.compact_storage::<T>(&map)
+            .context(RdStoreErrorKind::Compact)?;
+        Ok(map)
     }
 }
 
@@ -112,15 +124,17 @@ impl<SE> FileStorage<SE>
 where
     for<'de> SE: Serializer<'de> + Debug,
 {
-    fn read_content(&self, mut buf: &mut Vec<u8>) -> usize {
-        self.db_file
+    fn read_content(&self, mut buf: &mut Vec<u8>) -> Result<usize> {
+        let content = self
+            .db_file
             .try_lock()
             .unwrap()
             .read_to_end(&mut buf)
-            .unwrap()
+            .context(RdStoreErrorKind::ReadContent)?;
+        Ok(content)
     }
 
-    pub fn rebuild<T>(&self, data: &StoreHM) -> Result<()>
+    pub fn compact_storage<T>(&self, data: &StoreHM) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
@@ -129,15 +143,24 @@ where
             .iter()
             .map(|(id, value)| (id, value.lock().unwrap()))
             .map(|(id, value)| {
-                let data: T = self.serializer.deserialize(&*value).unwrap();
+                let data: T = self
+                    .serializer
+                    .deserialize(&*value)
+                    .context(RdStoreErrorKind::DataCorruption)
+                    .unwrap();
                 Record::new(*id, data, Operation::default())
             })
-            .flat_map(|record| self.serializer.serialize(&record).unwrap())
+            .flat_map(|record| {
+                self.serializer
+                    .serialize(&record)
+                    .context(RdStoreErrorKind::DataCorruption)
+                    .unwrap()
+            })
             .collect();
 
         if self.storage_exists() {
-            self.replace_data(tmp, &data);
-            self.replace_data(&self.file_path, &data);
+            self.flush_data(tmp, &data)?;
+            self.flush_data(&self.file_path, &data)?;
             remove_file(tmp).unwrap();
         }
         Ok(())
@@ -147,20 +170,28 @@ where
         Path::new(&self.file_path).exists()
     }
 
-    fn replace_data<'a, P: AsRef<Path>>(&'a self, path: P, data: &Vec<u8>) -> bool {
-        let mut storage = File::create(path).unwrap();
-        storage.set_len(10).unwrap();
-        storage.seek(SeekFrom::Start(0)).unwrap();
-        storage.write_all(&data).unwrap();
-        storage.sync_all().unwrap();
-        true
+    fn flush_data<'a, P: AsRef<Path>>(&'a self, path: P, data: &Vec<u8>) -> Result<()> {
+        let mut storage = File::create(path).context(RdStoreErrorKind::DataCorruption)?;
+        storage.set_len(0).context(RdStoreErrorKind::FlushData)?;
+        storage
+            .seek(SeekFrom::Start(0))
+            .context(RdStoreErrorKind::FlushData)?;
+        storage
+            .write_all(&data)
+            .context(RdStoreErrorKind::FlushData)?;
+        storage.sync_all().context(RdStoreErrorKind::FlushData)?;
+        Ok(())
     }
 
-    fn append_data<'a>(&'a self, data: &Vec<u8>) -> bool {
+    fn append_data<'a>(&'a self, data: &Vec<u8>) -> Result<()> {
         let mut storage = self.db_file.lock().unwrap();
-        storage.seek(SeekFrom::End(0)).unwrap();
-        storage.write_all(&data).unwrap();
-        storage.sync_all().unwrap();
-        true
+        storage
+            .seek(SeekFrom::End(0))
+            .context(RdStoreErrorKind::AppendData)?;
+        storage
+            .write_all(&data)
+            .context(RdStoreErrorKind::AppendData)?;
+        storage.sync_all().context(RdStoreErrorKind::AppendData)?;
+        Ok(())
     }
 }
