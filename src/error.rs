@@ -1,18 +1,53 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
+use uuid::Uuid;
 
 pub type Result<T> = ::std::result::Result<T, RdStoreError>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum RdStoreErrorKind {
-  #[fail(display = "Could not open file")]
-  File,
-  #[fail(display = "Could not serialize value")]
-  Serialize,
-  #[fail(display = "Could not deseralize value")]
-  Deserialize,
+  //STORAGE
+  #[fail(display = "Storage corrupted!")]
+  DataCorruption,
+  #[fail(display = "Storage corrupted!")]
+  Compact,
+  #[fail(display = "Could not compact storage")]
+  StorageSave,
+  #[fail(display = "Could not flush data into storage")]
+  FlushData,
+  #[fail(display = "Could not append data to storage")]
+  AppendData,
+  #[fail(display = "Could not open storage")]
+  StorageOpen,
+  #[fail(display = "Could not read storage")]
+  ReadContent,
+  #[fail(display = "Could not load storage content")]
+  ContentLoad,
+  #[fail(display = "Could not save data into storage")]
+  DataSave,
+  //STORE
+  #[fail(display = "Could not insert value")]
+  InsertValue,
+  #[fail(display = "Could not update value")]
+  UpdateValue,
+  #[fail(display = "Could not delete value")]
+  DeleteValue,
+  // KEYS
+  #[fail(display = "Could not find key {}", key)]
+  NotFound { key: Uuid },
+  #[fail(display = "Could not delete key")]
+  Deletekey,
+  #[fail(display = "Could not unlock mutex")]
+  Mutex,
   #[fail(display = "Database poisoned!")]
   Poisoned,
+  #[fail(display = "Value poisoned!")]
+  PoisonedValue,
+  // SERDE
+  #[fail(display = "Could not deserialize value")]
+  Deserialization,
+  #[fail(display = "Could not serialize value")]
+  Serialization,
 }
 
 #[derive(Debug)]

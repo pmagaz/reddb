@@ -11,7 +11,7 @@ pub trait Storage {
   fn new<T>() -> Result<Self>
   where
     Self: Sized;
-  fn load_data<T>(&self) -> StoreHM
+  fn load_content<T>(&self) -> Result<StoreHM>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq;
   fn save<T>(&self, docs: WriteOperations<T>) -> Result<()>

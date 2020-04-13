@@ -1,9 +1,9 @@
 use core::fmt::Display;
+use failure::ResultExt;
 use operation::Operation;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
-
 mod record;
 mod serializer;
 mod store;
@@ -12,7 +12,7 @@ mod error;
 mod operation;
 mod storage;
 
-use error::Result;
+use error::{RdStoreErrorKind, Result};
 use serializer::Serializer;
 use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
 use storage::FileStorage;
@@ -35,69 +35,84 @@ where
   for<'de> SE: Serializer<'de> + Debug,
   for<'de> ST: Storage + Debug,
 {
-  pub fn new() -> Self {
-    let storage = ST::new::<T>().unwrap();
-    let data: StoreHM = storage.load_data::<T>();
+  pub fn new() -> Result<Self> {
+    let storage = ST::new::<T>()?;
+    let data: StoreHM = storage
+      .load_content::<T>()
+      .context(RdStoreErrorKind::ContentLoad)?;
 
-    Self {
+    Ok(Self {
       store: Store::new(data),
       storage: storage,
-    }
+    })
   }
 
-  pub fn insert_one(&self, value: T) -> Result<Uuid> {
-    let id = self.store.insert_one(&value)?;
+  pub fn insert(&self, value: T) -> Result<Uuid> {
+    let id = self.store.insert(&value)?;
     self
       .storage
       .save_one((id, value, Operation::Insert))
-      .unwrap();
+      .context(RdStoreErrorKind::DataSave)?;
     Ok(id)
   }
 
-  pub fn find_one(&self, id: &Uuid) -> Result<T> {
-    Ok(self.store.find_one(id)?)
+  pub fn find(&self, id: &Uuid) -> Result<T> {
+    Ok(self.store.find(id)?)
   }
 
-  pub fn update_one(&'a self, id: &Uuid, new_value: T) -> Uuid {
-    let id = self.store.update_one(id, &new_value);
+  pub fn update(&'a self, id: &Uuid, new_value: T) -> Result<Uuid> {
+    let id = self.store.update(id, &new_value)?;
+
     self
       .storage
       .save_one((id, new_value, Operation::Update))
-      .unwrap();
-    id
+      .context(RdStoreErrorKind::DataSave)?;
+    Ok(id)
   }
 
-  pub fn delete_one(&self, id: &Uuid) -> Uuid {
-    let value = self.store.delete_one(id);
+  pub fn delete(&self, id: &Uuid) -> Result<Uuid> {
+    let value = self.store.delete(id)?;
     self
       .storage
       .save_one((*id, value, Operation::Delete))
-      .unwrap();
-    *id
+      .context(RdStoreErrorKind::DataSave)?;
+    Ok(*id)
   }
 
-  pub fn insert(&self, values: Vec<T>) -> usize {
-    let values = self.store.insert(values);
+  pub fn insert_many(&self, values: Vec<T>) -> Result<usize> {
+    let values = self.store.insert_many(values)?;
     let result = values.len();
-    self.storage.save(values).unwrap();
-    result
+    self
+      .storage
+      .save(values)
+      .context(RdStoreErrorKind::DataSave)?;
+
+    Ok(result)
   }
 
-  pub fn find(&self, search: &T) -> Vec<T> {
-    self.store.find(search)
+  pub fn find_many(&self, search: &T) -> Result<Vec<T>> {
+    let result = self.store.find_many(search)?;
+    Ok(result)
   }
 
-  pub fn update(&self, search: &T, new_value: &T) -> usize {
-    let values = self.store.update(search, new_value);
+  pub fn update_many(&self, search: &T, new_value: &T) -> Result<usize> {
+    let values = self.store.update_many(search, new_value)?;
     let result = values.len();
-    self.storage.save(values).unwrap();
-    result
+    self
+      .storage
+      .save(values)
+      .context(RdStoreErrorKind::DataSave)?;
+
+    Ok(result)
   }
 
-  pub fn delete(&self, search: &T) -> usize {
-    let values = self.store.delete(search);
+  pub fn delete_many(&self, search: &T) -> Result<usize> {
+    let values = self.store.delete_many(search)?;
     let result = values.len();
-    self.storage.save(values).unwrap();
-    result
+    self
+      .storage
+      .save(values)
+      .context(RdStoreErrorKind::DataSave)?;
+    Ok(result)
   }
 }

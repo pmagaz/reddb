@@ -1,10 +1,10 @@
-use failure::Error;
-
+use failure::{Error, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
 
 use super::{Serializer, Serializers};
+use crate::error::RdStoreErrorKind;
 
 #[derive(Debug)]
 pub struct Ron {
@@ -30,7 +30,9 @@ impl<'a> Serializer<'a> for Ron {
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let mut vec = ron::ser::to_string(value).unwrap().into_bytes();
+    let mut vec = ron::ser::to_string(value)
+      .context(RdStoreErrorKind::Serialization)?
+      .into_bytes();
     vec.extend("\n".as_bytes());
     Ok(vec)
   }
@@ -38,6 +40,6 @@ impl<'a> Serializer<'a> for Ron {
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    Ok(ron::de::from_bytes::<T>(value).unwrap())
+    Ok(ron::de::from_bytes::<T>(value)?) //.context(RdStoreErrorKind::Deserialization)?)
   }
 }
