@@ -8,18 +8,18 @@ use super::operation::Operation;
 pub struct Record<T> {
   pub _id: Uuid,
   pub data: T,
-  pub operation: Operation,
+  //pub operation: Operation,
 }
 
 impl<'a, T> Record<T>
 where
   T: Serialize + Deserialize<'a> + Debug,
 {
-  pub fn new(id: Uuid, value: T, operation: Operation) -> Self {
+  pub fn new(id: Uuid, value: T) -> Self {
     Self {
       _id: id,
       data: value,
-      operation: operation,
+      //operation: operation,
     }
   }
 }

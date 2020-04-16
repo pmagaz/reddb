@@ -14,8 +14,8 @@ use super::Storage;
 use crate::error::{RdStoreErrorKind, Result};
 use crate::record::Record;
 use crate::serializer::{Serializer, Serializers};
-use crate::store::{ByteString, StoreHM, WriteOperation, WriteOperations};
 use crate::Operation;
+use crate::{ByteString, StoreHM, WriteOperation};
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -49,13 +49,13 @@ where
         })
     }
 
-    fn save<T>(&self, data: WriteOperations<T>) -> Result<()>
+    fn save<T>(&self, data: Vec<WriteOperation<T>>) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
         let serialized: Vec<u8> = data
             .into_iter()
-            .map(|(id, value, operation)| Record::new(id, value, operation))
+            .map(|(id, value)| Record::new(id, value))
             .flat_map(|record| self.serializer.serialize(&record).unwrap())
             .collect();
         self.append_data(&serialized)
@@ -66,7 +66,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
-        let record = Record::new(doc.0, doc.1, doc.2);
+        let record = Record::new(doc.0, doc.1);
         let serialized = self.serializer.serialize(&record).unwrap();
         self.append_data(&serialized)
             .context(RdStoreErrorKind::AppendData)?;
@@ -92,26 +92,8 @@ where
 
             let id = record._id;
             let data = record.data;
-            match record.operation {
-                Operation::Insert => {
-                    let serialized = self.serializer.serialize(&data).unwrap();
-                    map.insert(id, Mutex::new(serialized));
-                }
-                Operation::Update => {
-                    match map.get_mut(&id) {
-                        Some(value) => {
-                            let mut guard = value.lock().unwrap();
-                            *guard = self
-                                .serializer
-                                .serialize(&data)
-                                .context(RdStoreErrorKind::DataCorruption)
-                                .unwrap();
-                        }
-                        None => {}
-                    };
-                }
-                Operation::Delete => {}
-            }
+            let serialized = self.serializer.serialize(&data).unwrap();
+            map.insert(id, Mutex::new(serialized));
         }
 
         self.compact_storage::<T>(&map)
@@ -148,7 +130,7 @@ where
                     .deserialize(&*value)
                     .context(RdStoreErrorKind::DataCorruption)
                     .unwrap();
-                Record::new(*id, data, Operation::default())
+                Record::new(*id, data)
             })
             .flat_map(|record| {
                 self.serializer
