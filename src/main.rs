@@ -21,7 +21,7 @@ fn main() -> std::result::Result<(), failure::Error> {
     foo: String::from("hola"),
   };
   let new_value = MyStruct {
-    foo: String::from("new Value"),
+    foo: String::from("adios"),
   };
   let new_value2 = MyStruct {
     foo: String::from("new Value"),
@@ -29,7 +29,7 @@ fn main() -> std::result::Result<(), failure::Error> {
   let new_value3 = MyStruct {
     foo: String::from("new Value3"),
   };
-  let db = rdstore::RonStore::<MyStruct>::new()?;
+  let db = rdstore::JsonStore::<MyStruct>::new()?;
   let _id = db.insert(query.clone()).unwrap();
   //let _id = db.insert_one(String::from("hola"));
   let id = db
@@ -37,20 +37,23 @@ fn main() -> std::result::Result<(), failure::Error> {
       foo: String::from("holaa"),
     })
     .unwrap();
-  let result = db.find(&Uuid::new_v4())?;
-  println!("FIND_ONE {:?}", result);
+  let result = db.delete(&Uuid::new_v4())?;
+  println!("DELETE{:?}", result);
   let result = db.find_many(&query)?;
-  println!("FIND ALL {:?}", result);
+  println!("FIND MANY {:?}", result);
   let result = db.update(&_id, new_value)?;
-  println!("FIND ONE UPDATED {:?}", result);
+  println!("UPDATE {:?}", result);
 
   //let result = db.delete(&Uuid::new_v4())?;
   println!("FIND ONE DELETED {:?}", result);
-  let result = db.update_many(&query, &new_value2)?;
-  println!("UPDATE ALL {:?}", result);
+  let new_value = MyStruct {
+    foo: String::from("adios"),
+  };
+  let result = db.update_many(&new_value, &new_value2)?;
+  println!("UPDATE MANY {:?}", result);
 
   let result = db.update_many(&query, &new_value3)?;
-  println!("UPDATE ALL {:?}", result);
+  println!("UPDATE MANY {:?}", result);
 
   let another = MyStruct {
     foo: String::from("22"),
@@ -58,10 +61,10 @@ fn main() -> std::result::Result<(), failure::Error> {
   //let id = db.insert(another.clone());
   // let id = db.insert(another.clone());
   let result = db.delete_many(&another)?;
-  println!("DELETE ALL {:?}", result);
+  println!("DELETE MANY {:?}", result);
 
   let arr = vec![another.clone(), another.clone()];
-  let result = db.insert_many(arr)?;
+  //let result = db.insert_many(arr)?;
   // println!("INSERT {:?}", result);
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();

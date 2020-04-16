@@ -11,26 +11,26 @@ use super::operation::Operation;
 use super::serializer::Serializer;
 
 pub type ByteString = Vec<u8>;
-pub type WriteOperation<T> = (Uuid, T, Operation);
+pub type WriteOperation<T> = (Uuid, T);
 pub type WriteOperations<T> = Vec<WriteOperation<T>>;
 pub type StoreHM = HashMap<Uuid, Mutex<ByteString>>;
 
 #[derive(Debug)]
-pub struct Store<T, SE> {
+pub struct Store<T> {
   pub store: RwLock<StoreHM>,
-  pub serializer: SE,
+  //pub serializer: SE,
   pub record: T,
 }
 
-impl<'a, T, SE> Store<T, SE>
+impl<'a, T> Store<T>
 where
   for<'de> T: Serialize + Deserialize<'de> + Debug + Display + Clone + Default + PartialEq,
-  for<'de> SE: Serializer<'de> + Debug,
+  // for<'de> SE: Serializer<'de> + Debug,
 {
   pub fn new(data: StoreHM) -> Self {
     Self {
       store: RwLock::new(data),
-      serializer: SE::default(),
+      // serializer: SE::default(),
       record: T::default(),
     }
   }
@@ -45,21 +45,21 @@ where
     Ok(lock)
   }
 
-  fn serialize(&self, value: &T) -> Result<ByteString> {
-    let serialized = self
-      .serializer
-      .serialize(value)
-      .context(RdStoreErrorKind::Serialization)?;
-    Ok(serialized)
-  }
+  // fn serialize(&self, value: &T) -> Result<ByteString> {
+  //   let serialized = self
+  //     .serializer
+  //     .serialize(value)
+  //     .context(RdStoreErrorKind::Serialization)?;
+  //   Ok(serialized)
+  // }
 
-  fn deserialize(&self, value: &Vec<u8>) -> Result<T> {
-    let deserialized = self
-      .serializer
-      .deserialize(value)
-      .context(RdStoreErrorKind::Deserialization)?;
-    Ok(deserialized)
-  }
+  // fn deserialize(&self, value: &Vec<u8>) -> Result<T> {
+  //   let deserialized = self
+  //     .serializer
+  //     .deserialize(value)
+  //     .context(RdStoreErrorKind::Deserialization)?;
+  //   Ok(deserialized)
+  // }
 
   fn insert_key_value(&self, id: Uuid, data: ByteString) -> Option<Mutex<ByteString>> {
     let mut store = self.write().unwrap();
@@ -119,13 +119,13 @@ where
     Ok(id.to_owned())
   }
 
-  pub fn delete(&self, id: &Uuid) -> Result<T> {
+  pub fn delete(&self, id: &Uuid) -> Result<MutexGuard<ByteString>> {
     let deleted = self.delete_key(id).ok_or(RdStoreErrorKind::Deletekey)?;
     let guard = deleted
       .lock()
       .map_err(|_| RdStoreErrorKind::PoisonedValue)?;
-    let result = self.deserialize(&guard)?;
-    Ok(result)
+    //let result = self.deserialize(&guard)?;
+    Ok(guard)
   }
 
   pub fn insert_many(&self, values: Vec<T>) -> Result<Vec<WriteOperation<T>>> {
