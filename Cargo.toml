@@ -20,10 +20,6 @@ exclude = [
 name = "rdstore"
 path = "src/lib.rs"
 
-[[bin]]
-name = "mybin"
-path = "src/main.rs"
-
 [dependencies]
 uuid = { version = "0.7.4", features = ["serde", "v4"] }
 failure = "0.1.7"
