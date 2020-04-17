@@ -16,10 +16,10 @@ pub trait Storage {
   fn load_content<T>(&self) -> Result<StoreHM>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq;
-  fn save<T>(&self, docs: Vec<KeyValue<T>>) -> Result<()>
+  fn save<T>(&self, kv_pairs: Vec<KeyValue<T>>) -> Result<()>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug;
-  fn save_one<T>(&self, doc: KeyValue<T>) -> Result<()>
+  fn save_one<T>(&self, kv_pair: KeyValue<T>) -> Result<()>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug;
 }

@@ -21,6 +21,7 @@ impl Default for Ron {
 
 pub type RonSerializer = Ron;
 
+//#[cfg(feature = "ron_ser")]
 impl<'a> Serializer<'a> for Ron {
   fn format(&self) -> &Serializers {
     &self.format
