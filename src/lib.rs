@@ -13,7 +13,7 @@ mod storage;
 use error::{RdStoreErrorKind, Result};
 use kv::KeyValue;
 use serializer::Serializer;
-use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
+pub use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
 use std::collections::HashMap;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use storage::FileStorage;
@@ -22,8 +22,11 @@ use storage::Storage;
 pub type ByteString = Vec<u8>;
 pub type StoreHM = HashMap<Uuid, Mutex<ByteString>>;
 
+//#[cfg(feature = "json_ser")]
 pub type JsonStore = RdStore<JsonSerializer, FileStorage<JsonSerializer>>;
+//#[cfg(feature = "yaml_ser")]
 pub type YamlStore = RdStore<YamlSerializer, FileStorage<YamlSerializer>>;
+//#[cfg(feature = "ron_ser")]
 pub type RonStore = RdStore<RonSerializer, FileStorage<RonSerializer>>;
 
 #[derive(Debug)]
@@ -184,12 +187,13 @@ where
       .map(|value| {
         let key = Uuid::new_v4();
         let serialized = self.serialize(&value).unwrap();
-        let _result = self.insert_key_value(key, serialized).unwrap();
+        let _result = self.insert_key_value(key, serialized);
         KeyValue::new(key, value)
       })
       .collect();
 
     let result = kv_pairs.len();
+    println!("{:?}", result);
     self
       .storage
       .save(kv_pairs)

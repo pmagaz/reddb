@@ -20,6 +20,7 @@ impl Default for Yaml {
 
 pub type YamlSerializer = Yaml;
 
+//ca#[cfg(feature = "yaml_ser")]
 impl<'a> Serializer<'a> for Yaml {
   fn format(&self) -> &Serializers {
     &self.format

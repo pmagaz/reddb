@@ -8,7 +8,6 @@ mod ron;
 mod yaml;
 
 pub use self::ron::RonSerializer;
-//use crate::error::Result;
 pub use json::JsonSerializer;
 pub use yaml::YamlSerializer;
 
