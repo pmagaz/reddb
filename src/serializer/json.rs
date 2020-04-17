@@ -21,6 +21,7 @@ impl Default for Json {
 
 pub type JsonSerializer = Json;
 
+//#[cfg(feature = "json_ser")]
 impl<'a> Serializer<'a> for Json {
   fn format(&self) -> &Serializers {
     &self.format

@@ -1,8 +1,20 @@
 [package]
 name = "rdstore"
-version = "0.1.0"
-authors = ["pmagaz <magazpablo@gmail.com>"]
+version = "0.2.0"
+authors = ["Pablo Magaz <magazpablo@gmail.com>"]
+description = "Minimalistic in-memory data store with persistance"
+keywords = ["store", "memory", "json", "ron", "yaml"]
+categories = ["database", "store", "persistance"]
+
+documentation = "https://docs.rs/rdstore"
+repository = "https://github.com/pmagaz/rdstore"
 edition = "2018"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+
+exclude = [
+  "/.gitignore",
+]
 
 [lib]
 name = "rdstore"
@@ -14,9 +26,30 @@ path = "src/main.rs"
 
 [dependencies]
 uuid = { version = "0.7.4", features = ["serde", "v4"] }
-bincode = "1.2.1"
-serde_json = "1.0.51"
-serde_yaml = "0.8.11"
-ron = "0.5.1"
 failure = "0.1.7"
 serde = { version = "1.0", features = ["derive"] }
+
+[dependencies.serde_json]
+optional = false
+version = "1.0.51"
+
+[dependencies.ron]
+optional = false
+version = "0.5.1"
+
+[dependencies.serde_yaml]
+optional = false
+version = "0.8.11"
+
+[dependencies.bincode]
+optional = false
+version = "1.2.1"
+
+# [features]
+# default = []
+# json_ser = ["serde_json"]
+# ron_ser = ["ron"]
+# yaml_ser = ["serde_yaml"]
+
+[dev-dependencies]
+criterion = "0.3.1"

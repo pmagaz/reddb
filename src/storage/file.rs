@@ -54,19 +54,17 @@ where
     {
         let serialized: Vec<u8> = data
             .into_iter()
-            //.map(|(id, value)| KeyValue::new(id, value))
-            .flat_map(|record| self.serializer.serialize(&record).unwrap())
+            .flat_map(|kv_pair| self.serializer.serialize(&kv_pair).unwrap())
             .collect();
         self.append_data(&serialized)
             .context(RdStoreErrorKind::AppendData)?;
         Ok(())
     }
-    fn save_one<T>(&self, doc: KeyValue<T>) -> Result<()>
+    fn save_one<T>(&self, kv_pair: KeyValue<T>) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
-        //let record = Record::new(doc.0, doc.1);
-        let serialized = self.serializer.serialize(&doc).unwrap();
+        let serialized = self.serializer.serialize(&kv_pair).unwrap();
         self.append_data(&serialized)
             .context(RdStoreErrorKind::AppendData)?;
         Ok(())
