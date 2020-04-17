@@ -4,7 +4,7 @@ extern crate rdstore;
 use uuid::Uuid;
 
 fn main() -> std::result::Result<(), failure::Error> {
-  #[derive(Clone, Debug, Default, Serialize, PartialEq, Deserialize)]
+  #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
   struct MyStruct {
     foo: String,
   }
@@ -29,7 +29,7 @@ fn main() -> std::result::Result<(), failure::Error> {
   let new_value3 = MyStruct {
     foo: String::from("new Value3"),
   };
-  let db = rdstore::JsonStore::<MyStruct>::new()?;
+  let db = rdstore::RonStore::new::<MyStruct>()?;
   let _id = db.insert(query.clone()).unwrap();
   //let _id = db.insert_one(String::from("hola"));
   let id = db
