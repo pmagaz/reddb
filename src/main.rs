@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
-extern crate reddb;
+extern crate rdstore;
+use uuid::Uuid;
 
-fn main() {
-  #[derive(Clone, Debug, Default, Serialize, PartialEq, Deserialize)]
+fn main() -> std::result::Result<(), failure::Error> {
+  #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
   struct MyStruct {
     foo: String,
   }
@@ -20,7 +21,7 @@ fn main() {
     foo: String::from("hola"),
   };
   let new_value = MyStruct {
-    foo: String::from("new Value"),
+    foo: String::from("adios"),
   };
   let new_value2 = MyStruct {
     foo: String::from("new Value"),
@@ -28,38 +29,43 @@ fn main() {
   let new_value3 = MyStruct {
     foo: String::from("new Value3"),
   };
-  let db = reddb::RonDb::<MyStruct>::new();
-  let _id = db.insert_one(query.clone());
+  let db = rdstore::RonStore::new::<MyStruct>()?;
+  let _id = db.insert(query.clone()).unwrap();
   //let _id = db.insert_one(String::from("hola"));
-  let id = db.insert_one(MyStruct {
-    foo: String::from("holaa"),
-  });
-  let result = db.find_one(&id);
-  println!("FIND_ONE {:?}", result);
-  //let result = db.find(&query);
-  println!("FIND ALL {:?}", result);
-  let result = db.update_one(&_id, new_value);
-  println!("FIND ONE UPDATED {:?}", result);
+  let id = db
+    .insert(MyStruct {
+      foo: String::from("holaa"),
+    })
+    .unwrap();
+  let result = db.delete(&Uuid::new_v4())?;
+  println!("DELETE{:?}", result);
+  let result = db.find_many(&query)?;
+  println!("FIND MANY {:?}", result);
+  let result = db.update(&_id, new_value)?;
+  println!("UPDATE {:?}", result);
 
-  let result = db.delete_one(&_id);
+  //let result = db.delete(&Uuid::new_v4())?;
   println!("FIND ONE DELETED {:?}", result);
-  let result = db.update(&query, &new_value2);
-  println!("UPDATE ALL {:?}", result);
+  let new_value = MyStruct {
+    foo: String::from("adios"),
+  };
+  let result = db.update_many(&new_value, &new_value2)?;
+  println!("UPDATE MANY {:?}", result);
 
-  let result = db.update(&query, &new_value3);
-  println!("UPDATE ALL {:?}", result);
+  let result = db.update_many(&query, &new_value3)?;
+  println!("UPDATE MANY {:?}", result);
 
   let another = MyStruct {
     foo: String::from("22"),
   };
-  let id = db.insert_one(another.clone());
-  let id = db.insert_one(another.clone());
-  let result = db.delete(&another);
-  println!("DELETE ALL {:?}", result);
+  //let id = db.insert(another.clone());
+  // let id = db.insert(another.clone());
+  let result = db.delete_many(&another)?;
+  println!("DELETE MANY {:?}", result);
 
   let arr = vec![another.clone(), another.clone()];
-  let result = db.insert(arr);
-  println!("INSERT {:?}", result);
+  //let result = db.insert_many(arr)?;
+  // println!("INSERT {:?}", result);
   // println!("JSON STRINGS");
   // let db = RedDb::<String, JsonSerializer>::new();
   // let query = r#"
@@ -74,7 +80,7 @@ fn main() {
   //           "boo": 12,
   //       }"#;
 
-  // let id = db.insert(query.to_owned());
+  // let id = db.insert_many(query.to_owned());
   // println!("INSERT {:?}", &id);
   // let result = db.find_one(&id);
   // println!("FIND_ONE {:?}", result);
@@ -84,30 +90,31 @@ fn main() {
   //println!("JSON VALUES");
 
   // let db2 = RedDb::<Value, JsonSerializer>::new();
-  // let _id = db2.insert(json!({ "leches": true}));
-  // let id = db2.insert(json!({ "leches": true, "boo": 12}));
-  // let id2 = db2.insert(json!({ "leches": false}));
+  // let _id = db2.insert_many(json!({ "leches": true}));
+  // let id = db2.insert_many(json!({ "leches": true, "boo": 12}));
+  // let id2 = db2.insert_many(json!({ "leches": false}));
   // let result = db2.find_one(&id);
   // println!("FIND_ONE {:?}", result);
-  // db2.insert(json!({"name":"record1", "leches": 11}));
+  // db2.insert_many(json!({"name":"record1", "leches": 11}));
   // let result = db2.find(json!({"name":"record1", "leches": 11}));
   // println!("FIND ALL {:?}", result);
-  // db2.delete_one(&id2);
+  // db2.delete&id2);
   // let result = db2.find(json!({ "leches": false}));
   // println!("FIND DELETED ONE {:?}", result);
-  // db2.delete(json!({ "leches": true}));
+  // db2.delete_many(json!({ "leches": true}));
   // let result = db2.find(json!({ "leches": false}));
   // println!("FIND DELETED ALL {:?}", result);
   // let result = db2.find(json!({ "leches": true, "boo": 12}));
   // println!("FIND ALL {:?}", result);
-  // let id3 = db2.insert(json!({ "record": true, "foo": 11}));
-  // db2.update_one(&id3, json!({ "record": "updateeeed"}));
+  // let id3 = db2.insert_many(json!({ "record": true, "foo": 11}));
+  // db2.update&id3, json!({ "record": "updateeeed"}));
   // let result = db2.find_one(&id3);
   // println!("UPDATED ONE {:?}", result);
-  // db2.update(
+  // db2.update_many(
   //   json!({ "record": "updateeeed"}),
   //   json!({ "record": "updated!"}),
   // );
   // let result = db2.find(json!({ "record": "updated!"}));
   // println!("UPDATED ALL {:?}", result);
+  Ok(())
 }
