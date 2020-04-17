@@ -31,30 +31,20 @@ fn main() -> std::result::Result<(), failure::Error> {
   };
   let db = rdstore::RonStore::new::<MyStruct>()?;
   let _id = db.insert(query.clone()).unwrap();
-  //let _id = db.insert_one(String::from("hola"));
   let id = db
     .insert(MyStruct {
       foo: String::from("holaa"),
     })
     .unwrap();
   let result = db.delete(&Uuid::new_v4())?;
-  println!("DELETE{:?}", result);
+  let result: MyStruct = db.find(&id).unwrap();
   let result = db.find_many(&query)?;
-  println!("FIND MANY {:?}", result);
   let result = db.update(&_id, new_value)?;
-  println!("UPDATE {:?}", result);
-
-  //let result = db.delete(&Uuid::new_v4())?;
-  println!("FIND ONE DELETED {:?}", result);
   let new_value = MyStruct {
     foo: String::from("adios"),
   };
   let result = db.update_many(&new_value, &new_value2)?;
-  println!("UPDATE MANY {:?}", result);
-
   let result = db.update_many(&query, &new_value3)?;
-  println!("UPDATE MANY {:?}", result);
-
   let another = MyStruct {
     foo: String::from("22"),
   };

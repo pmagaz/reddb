@@ -117,7 +117,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let tmp = ".tmp";
+        // let tmp = ".tmp";
         let data: ByteString = data
             .iter()
             .map(|(id, value)| (id, value.lock().unwrap()))
@@ -138,9 +138,9 @@ where
             .collect();
 
         if self.storage_exists() {
-            self.flush_data(tmp, &data)?;
+            // self.flush_data(tmp, &data)?;
             self.flush_data(&self.file_path, &data)?;
-            remove_file(tmp).unwrap();
+            //remove_file(tmp).unwrap();
         }
         Ok(())
     }

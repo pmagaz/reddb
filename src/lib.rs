@@ -187,12 +187,13 @@ where
       .map(|value| {
         let key = Uuid::new_v4();
         let serialized = self.serialize(&value).unwrap();
-        let _result = self.insert_key_value(key, serialized).unwrap();
+        let _result = self.insert_key_value(key, serialized);
         KeyValue::new(key, value)
       })
       .collect();
 
     let result = kv_pairs.len();
+    println!("{:?}", result);
     self
       .storage
       .save(kv_pairs)
