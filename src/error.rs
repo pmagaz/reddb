@@ -25,13 +25,6 @@ pub enum RdStoreErrorKind {
   ContentLoad,
   #[fail(display = "Could not save data into storage")]
   DataSave,
-  //STORE
-  #[fail(display = "Could not insert value")]
-  InsertValue,
-  #[fail(display = "Could not update value")]
-  UpdateValue,
-  #[fail(display = "Could not delete value")]
-  DeleteValue,
   // KEYS
   #[fail(display = "Could not find key {}", key)]
   NotFound { key: Uuid },

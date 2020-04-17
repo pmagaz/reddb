@@ -12,10 +12,9 @@ use std::sync::Mutex;
 
 use super::Storage;
 use crate::error::{RdStoreErrorKind, Result};
-use crate::record::Record;
+use crate::kv::KeyValue;
 use crate::serializer::{Serializer, Serializers};
-use crate::Operation;
-use crate::{ByteString, StoreHM, WriteOperation};
+use crate::{ByteString, StoreHM};
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -49,25 +48,25 @@ where
         })
     }
 
-    fn save<T>(&self, data: Vec<WriteOperation<T>>) -> Result<()>
+    fn save<T>(&self, data: Vec<KeyValue<T>>) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
         let serialized: Vec<u8> = data
             .into_iter()
-            .map(|(id, value)| Record::new(id, value))
+            //.map(|(id, value)| KeyValue::new(id, value))
             .flat_map(|record| self.serializer.serialize(&record).unwrap())
             .collect();
         self.append_data(&serialized)
             .context(RdStoreErrorKind::AppendData)?;
         Ok(())
     }
-    fn save_one<T>(&self, doc: WriteOperation<T>) -> Result<()>
+    fn save_one<T>(&self, doc: KeyValue<T>) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug,
     {
-        let record = Record::new(doc.0, doc.1);
-        let serialized = self.serializer.serialize(&record).unwrap();
+        //let record = Record::new(doc.0, doc.1);
+        let serialized = self.serializer.serialize(&doc).unwrap();
         self.append_data(&serialized)
             .context(RdStoreErrorKind::AppendData)?;
         Ok(())
@@ -84,16 +83,16 @@ where
         for (_index, content) in buf.lines().enumerate() {
             let line = content.unwrap();
             let byte_str = &line.into_bytes();
-            let record: Record<T> = self
+            let record: KeyValue<T> = self
                 .serializer
                 .deserialize(byte_str)
                 .context(RdStoreErrorKind::DataCorruption)
                 .unwrap();
 
-            let id = record._id;
-            let data = record.data;
-            let serialized = self.serializer.serialize(&data).unwrap();
-            map.insert(id, Mutex::new(serialized));
+            let key = record.key;
+            let value = record.value;
+            let serialized = self.serializer.serialize(&value).unwrap();
+            map.insert(key, Mutex::new(serialized));
         }
 
         self.compact_storage::<T>(&map)
@@ -130,7 +129,7 @@ where
                     .deserialize(&*value)
                     .context(RdStoreErrorKind::DataCorruption)
                     .unwrap();
-                Record::new(*id, data)
+                KeyValue::new(*id, data)
             })
             .flat_map(|record| {
                 self.serializer
