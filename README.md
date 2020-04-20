@@ -1,4 +1,4 @@
-# RedStore
+# RedStore (In development!)
 
 `RedStore` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml)RedStore has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data. 
 
