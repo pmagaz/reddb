@@ -4,7 +4,7 @@ use std::default::Default;
 use std::fmt::Debug;
 
 use super::{Serializer, Serializers};
-use crate::error::RdStoreErrorKind;
+use crate::error::RedDbErrorKind;
 
 #[derive(Debug)]
 pub struct Ron {
@@ -14,7 +14,7 @@ pub struct Ron {
 impl Default for Ron {
   fn default() -> Ron {
     Ron {
-      format: Serializers::Ron(".ron.db".to_owned()),
+      format: Serializers::Ron(".ron".to_owned()),
     }
   }
 }
@@ -27,20 +27,20 @@ impl<'a> Serializer<'a> for Ron {
     &self.format
   }
 
-  fn serialize<T>(&self, value: &T) -> Result<Vec<u8>, Error>
+  fn serialize<T>(&self, data: &T) -> Result<Vec<u8>, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let mut vec = ron::ser::to_string(value)
-      .context(RdStoreErrorKind::Serialization)?
+    let mut vec = ron::ser::to_string(data)
+      .context(RedDbErrorKind::Serialization)?
       .into_bytes();
-    vec.extend("\n".as_bytes());
+    vec.extend(b"\n");
     Ok(vec)
   }
-  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T, Error>
+  fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    Ok(ron::de::from_bytes::<T>(value)?) //.context(RdStoreErrorKind::Deserialization)?)
+    Ok(ron::de::from_bytes::<T>(data)?)
   }
 }

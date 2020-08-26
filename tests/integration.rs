@@ -1,9 +1,10 @@
-use rdstore::RonStore;
+use reddb::{Document, RonDb};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
 use std::io::Error;
 use std::path::Path;
+use uuid::Uuid;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -19,30 +20,31 @@ impl fmt::Display for MyStruct {
 }
 
 fn setup() -> Result<()> {
-  if Path::new(".ron.db").exists() {
-    fs::remove_file(".ron.db").unwrap();
+  if Path::new(".db.yaml").exists() {
+    fs::remove_file(".db.yaml").unwrap();
   }
+  Ok(())
+}
+
+#[test]
+fn find_one() -> Result<()> {
+  setup().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
+  let search = MyStruct {
+    foo: String::from("hi"),
+  };
+
+  let doc = db.insert_one(search.clone()).unwrap();
+  let result: Document<MyStruct> = db.find_one(&doc._id).unwrap();
+  println!("hola {:?}", result);
+  assert_eq!(result.data, search);
   Ok(())
 }
 
 #[test]
 fn find() -> Result<()> {
   setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-  let search = MyStruct {
-    foo: String::from("hi"),
-  };
-
-  let id = store.insert(search.clone()).unwrap();
-  let result: MyStruct = store.find(&id).unwrap();
-  assert_eq!(result, search);
-  Ok(())
-}
-
-#[test]
-fn find_many() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
 
   let one = MyStruct {
     foo: String::from("one"),
@@ -53,33 +55,33 @@ fn find_many() -> Result<()> {
   };
 
   let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let result = store.find_many(&one).unwrap();
+  let uuid = db.insert(many).unwrap();
+  let result = db.find(&one).unwrap();
   assert_eq!(result.len(), 2);
+  Ok(())
+}
+
+#[test]
+fn delete_one() -> Result<()> {
+  setup().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
+  let search = MyStruct {
+    foo: String::from("hi"),
+  };
+
+  let doc = db.insert_one(search.clone()).unwrap();
+  let deleted = db.delete_one(&doc._id).unwrap();
+  assert_eq!(deleted, true);
+
+  let not_deleted = db.delete_one(&doc._id).unwrap();
+  assert_eq!(not_deleted, false);
   Ok(())
 }
 
 #[test]
 fn delete() -> Result<()> {
   setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-  let search = MyStruct {
-    foo: String::from("hi"),
-  };
-
-  let id = store.insert(search.clone()).unwrap();
-  let deleted = store.delete(&id).unwrap();
-  assert_eq!(deleted, true);
-
-  let not_deleted = store.delete(&id).unwrap();
-  assert_eq!(not_deleted, false);
-  Ok(())
-}
-
-#[test]
-fn delete_many() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
 
   let one = MyStruct {
     foo: String::from("one"),
@@ -90,19 +92,19 @@ fn delete_many() -> Result<()> {
   };
 
   let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let deleted = store.delete_many(&one).unwrap();
+  let uuid = db.insert(many).unwrap();
+  let deleted = db.delete(&one).unwrap();
   assert_eq!(deleted, 2);
 
-  let not_deleted = store.delete_many(&one).unwrap();
+  let not_deleted = db.delete(&one).unwrap();
   assert_eq!(not_deleted, 0);
   Ok(())
 }
 
 #[test]
-fn update() -> Result<()> {
+fn update_one() -> Result<()> {
   setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
   let original = MyStruct {
     foo: String::from("hi"),
   };
@@ -111,17 +113,17 @@ fn update() -> Result<()> {
     foo: String::from("bye"),
   };
 
-  let id = store.insert(original.clone()).unwrap();
-  store.update(&id, updated.clone()).unwrap();
-  let result: MyStruct = store.find(&id).unwrap();
-  assert_eq!(result, updated);
+  let doc = db.insert_one(original.clone()).unwrap();
+  db.update_one(&doc._id, updated.clone()).unwrap();
+  let result: Document<MyStruct> = db.find_one(&doc._id).unwrap();
+  assert_eq!(result.data, updated);
   Ok(())
 }
 
 #[test]
-fn update_many() -> Result<()> {
+fn update() -> Result<()> {
   setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
+  let db = RonDb::new::<MyStruct>(".db").unwrap();
 
   let one = MyStruct {
     foo: String::from("one"),
@@ -132,10 +134,10 @@ fn update_many() -> Result<()> {
   };
 
   let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let updated = store.update_many(&one, &two).unwrap();
+  let uuid = db.insert(many).unwrap();
+  let updated = db.update(&one, &two).unwrap();
   assert_eq!(updated, 2);
-  let result = store.find_many(&two).unwrap();
+  let result = db.find(&two).unwrap();
   assert_eq!(result.len(), 3);
   Ok(())
 }

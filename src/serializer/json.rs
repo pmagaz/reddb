@@ -1,10 +1,9 @@
-use failure::{Error, ResultExt};
+use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
 
 use super::{Serializer, Serializers};
-use crate::error::RdStoreErrorKind;
 
 #[derive(Debug)]
 pub struct Json {
@@ -14,7 +13,7 @@ pub struct Json {
 impl Default for Json {
   fn default() -> Json {
     Json {
-      format: Serializers::Json(".json.db".to_owned()),
+      format: Serializers::Json(".json".to_owned()),
     }
   }
 }
@@ -27,19 +26,19 @@ impl<'a> Serializer<'a> for Json {
     &self.format
   }
 
-  fn serialize<T>(&self, value: &T) -> Result<Vec<u8>, Error>
+  fn serialize<T>(&self, data: &T) -> Result<Vec<u8>, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let mut vec = serde_json::to_vec(value)?;
-    vec.extend("\n".as_bytes());
+    let mut vec = serde_json::to_vec(data)?;
+    vec.extend(b"\n");
     Ok(vec)
   }
-  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T, Error>
+  fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let vec = serde_json::from_slice::<T>(value)?;
+    let vec = serde_json::from_slice::<T>(data)?;
     Ok(vec)
   }
 }

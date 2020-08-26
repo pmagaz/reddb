@@ -1,267 +1,286 @@
-use core::fmt::Display;
 use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
-mod serializer;
-
+mod document;
 mod error;
-mod kv;
-mod operation;
+mod serializer;
 mod storage;
 
-use error::{RdStoreErrorKind, Result};
-use kv::KeyValue;
-use serializer::Serializer;
-pub use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
+pub use document::Document;
+use error::{RedDbErrorKind, Result};
+pub use serializer::{JsonSerializer, RonSerializer, Serializer, YamlSerializer};
 use std::collections::HashMap;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use storage::FileStorage;
 use storage::Storage;
 
-pub type ByteString = Vec<u8>;
-pub type StoreHM = HashMap<Uuid, Mutex<ByteString>>;
+pub type RedDbHM = HashMap<Uuid, Mutex<Vec<u8>>>;
 
 //#[cfg(feature = "json_ser")]
-pub type JsonStore = RdStore<JsonSerializer, FileStorage<JsonSerializer>>;
+pub type JsonDb = RedDb<JsonSerializer, FileStorage<JsonSerializer>>;
 //#[cfg(feature = "yaml_ser")]
-pub type YamlStore = RdStore<YamlSerializer, FileStorage<YamlSerializer>>;
+pub type YamlDb = RedDb<YamlSerializer, FileStorage<YamlSerializer>>;
 //#[cfg(feature = "ron_ser")]
-pub type RonStore = RdStore<RonSerializer, FileStorage<RonSerializer>>;
+pub type RonDb = RedDb<RonSerializer, FileStorage<RonSerializer>>;
 
 #[derive(Debug)]
-pub struct RdStore<SE, ST> {
-  pub store: RwLock<StoreHM>,
+pub struct RedDb<SE, ST> {
+  pub db: RwLock<RedDbHM>,
   pub storage: ST,
   pub serializer: SE,
 }
 
-impl<'a, SE, ST> RdStore<SE, ST>
+impl<'a, SE, ST> RedDb<SE, ST>
 where
   for<'de> SE: Serializer<'de> + Debug,
   for<'de> ST: Storage + Debug,
 {
-  pub fn new<T>() -> Result<Self>
+  pub fn new<T>(db_name: &str) -> Result<Self>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let storage = ST::new::<T>()?;
-    let data: StoreHM = storage
+    let storage = ST::new(db_name)?;
+    let data: RedDbHM = storage
       .load_content::<T>()
-      .context(RdStoreErrorKind::ContentLoad)?;
+      .context(RedDbErrorKind::ContentLoad)?;
 
     Ok(Self {
-      store: RwLock::new(data),
-      storage: storage,
+      db: RwLock::new(data),
+      storage,
       serializer: SE::default(),
     })
   }
-  pub fn read(&'a self) -> Result<RwLockReadGuard<'a, StoreHM>> {
-    let lock = self.store.read().map_err(|_| RdStoreErrorKind::Poisoned)?;
+  pub fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
+    let lock = self.db.read().map_err(|_| RedDbErrorKind::Poisoned)?;
     Ok(lock)
   }
 
-  fn write(&'a self) -> Result<RwLockWriteGuard<'a, StoreHM>> {
-    let lock = self.store.write().map_err(|_| RdStoreErrorKind::Poisoned)?;
+  fn write(&'a self) -> Result<RwLockWriteGuard<'a, RedDbHM>> {
+    let lock = self.db.write().map_err(|_| RedDbErrorKind::Poisoned)?;
     Ok(lock)
   }
 
-  fn serialize<T>(&self, value: &T) -> Result<ByteString>
+  pub fn create_doc<T>(&self, _id: &Uuid, data: T) -> Document<T>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    Ok(
-      self
-        .serializer
-        .serialize(value)
-        .context(RdStoreErrorKind::Serialization)?,
-    )
+    Document::new(*_id, data)
   }
 
-  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T>
+  fn insert_doc<T>(&self, data: T) -> Result<Document<T>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    Ok(
-      self
-        .serializer
-        .deserialize(value)
-        .context(RdStoreErrorKind::Deserialization)?,
-    )
+    let mut db = self.db.write().unwrap();
+    let _id = Uuid::new_v4();
+    let serialized = self.serialize(&data).unwrap();
+    db.insert(_id, Mutex::new(serialized));
+    let doc = self.create_doc(&_id, data);
+    Ok(doc)
   }
 
-  fn insert_key_value(&self, key: Uuid, data: ByteString) -> Option<Mutex<ByteString>> {
-    let mut store = self.store.write().unwrap();
-    store.insert(key, Mutex::new(data))
-  }
-
-  pub fn find_keys<T>(&self, search: &T) -> Result<Vec<Uuid>>
+  pub fn find_ids<T>(&self, search: &T) -> Result<Vec<Uuid>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let store = self.read()?;
+    let db = self.read()?;
     let serialized = self.serialize(search)?;
-    let kv_pairs: Vec<Uuid> = store
+    let docs: Vec<Uuid> = db
       .iter()
-      .map(|(_key, value)| {
+      .map(|(_id, data)| {
         (
-          _key,
-          value
+          _id,
+          data
             .lock()
-            .map_err(|_| RdStoreErrorKind::PoisonedValue)
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
             .unwrap(),
         )
       })
-      .filter(|(_key, value)| **value == serialized)
-      .map(|(key, _value)| *key)
+      .filter(|(_id, data)| **data == serialized)
+      .map(|(_id, _value)| *_id)
       .collect();
-    Ok(kv_pairs)
+    Ok(docs)
   }
 
-  pub fn insert<T>(&self, value: T) -> Result<Uuid>
+  pub fn insert_one<T>(&self, data: T) -> Result<Document<T>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq,
   {
-    let key = Uuid::new_v4();
-    let data = self.serialize(&value)?;
-    let _result = self.insert_key_value(key, data);
+    let doc = self.insert_doc(data).unwrap();
     self
       .storage
-      .save_one(KeyValue::new(key, value))
-      .context(RdStoreErrorKind::DataSave)?;
-    Ok(key)
+      .persist(&[doc.to_owned()])
+      .context(RedDbErrorKind::Datapersist)?;
+    Ok(doc)
   }
 
-  pub fn find<T>(&self, key: &Uuid) -> Result<T>
+  pub fn find_one<T>(&self, _id: &Uuid) -> Result<Document<T>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let store = self.read()?;
-    let value = store
-      .get(&key)
-      .ok_or(RdStoreErrorKind::NotFound { key: *key })?;
-    let guard = value.lock().map_err(|_| RdStoreErrorKind::PoisonedValue)?;
-    let result = self.deserialize(&*guard)?;
-    Ok(result)
+    let db = self.read()?;
+    let data = db
+      .get(&_id)
+      .ok_or(RedDbErrorKind::NotFound { uuid: *_id })?;
+
+    let guard = data.lock().map_err(|_| RedDbErrorKind::PoisonedValue)?;
+    let data = self.deserialize(&*guard)?;
+    let doc = self.create_doc(_id, data);
+    Ok(doc)
   }
 
-  pub fn update<T>(&'a self, key: &Uuid, new_value: T) -> Result<bool>
+  pub fn update_one<T>(&'a self, _id: &Uuid, new_value: T) -> Result<bool>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let mut store = self.write()?;
-    if store.contains_key(key) {
-      let value = store
-        .get_mut(&key)
-        .ok_or(RdStoreErrorKind::NotFound { key: *key })?;
+    let mut db = self.write()?;
+    if db.contains_key(_id) {
+      let data = db
+        .get_mut(&_id)
+        .ok_or(RedDbErrorKind::NotFound { uuid: *_id })?;
 
-      let mut guard = value.lock().map_err(|_| RdStoreErrorKind::PoisonedValue)?;
+      let mut guard = data.lock().map_err(|_| RedDbErrorKind::PoisonedValue)?;
       *guard = self.serialize(&new_value)?;
-
+      let doc = self.create_doc(_id, new_value);
       self
         .storage
-        .save_one(KeyValue::new(*key, new_value))
-        .context(RdStoreErrorKind::DataSave)?;
+        .persist(&[doc])
+        .context(RedDbErrorKind::Datapersist)?;
       Ok(true)
     } else {
       Ok(false)
     }
   }
 
-  pub fn delete(&self, key: &Uuid) -> Result<bool> {
-    let mut store = self.store.write().unwrap();
-    if store.contains_key(key) {
-      store.remove(key).unwrap();
+  pub fn delete_one(&self, _id: &Uuid) -> Result<bool> {
+    let mut db = self.db.write().unwrap();
+    if db.contains_key(_id) {
+      db.remove(_id).unwrap();
       Ok(true)
     } else {
       Ok(false)
     }
   }
 
-  pub fn insert_many<T>(&self, values: Vec<T>) -> Result<usize>
+  pub fn insert<T>(&self, values: Vec<T>) -> Result<Vec<Document<T>>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let kv_pairs: Vec<KeyValue<T>> = values
+    let docs: Vec<Document<T>> = values
       .into_iter()
-      .map(|value| {
-        let key = Uuid::new_v4();
-        let serialized = self.serialize(&value).unwrap();
-        let _result = self.insert_key_value(key, serialized);
-        KeyValue::new(key, value)
-      })
+      .map(|data| self.insert_doc(data).unwrap())
       .collect();
 
-    let result = kv_pairs.len();
-    println!("{:?}", result);
     self
       .storage
-      .save(kv_pairs)
-      .context(RdStoreErrorKind::DataSave)?;
+      .persist(&docs)
+      .context(RedDbErrorKind::Datapersist)?;
 
-    Ok(result)
+    Ok(docs)
   }
 
-  pub fn find_many<T>(&self, search: &T) -> Result<Vec<T>>
+  pub fn find<T>(&self, search: &T) -> Result<Vec<Document<T>>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let store = self.read()?;
+    let db = self.read()?;
     let serialized = self.serialize(search)?;
-    let kv_pairs: Vec<T> = store
+    let docs: Vec<Document<T>> = db
       .iter()
-      .map(|(_key, value)| {
-        value
-          .lock()
-          .map_err(|_| RdStoreErrorKind::PoisonedValue)
-          .unwrap()
-      })
-      .filter(|value| **value == serialized)
-      .map(|value| self.deserialize(&*value).unwrap())
-      .collect();
-    Ok(kv_pairs)
-  }
-
-  pub fn update_many<T>(&self, search: &T, new_value: &T) -> Result<usize>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + Display + PartialEq,
-  {
-    let mut store = self.write()?;
-    let serialized = self.serialize(search)?;
-
-    let kv_pairs: Vec<KeyValue<T>> = store
-      .iter_mut()
-      .map(|(_key, value)| {
+      .map(|(_id, data)| {
         (
-          _key,
-          value
+          _id,
+          data
             .lock()
-            .map_err(|_| RdStoreErrorKind::PoisonedValue)
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
             .unwrap(),
         )
       })
-      .filter(|(_key, value)| **value == serialized)
-      .map(|(key, mut value)| {
-        *value = self.serialize(new_value).unwrap();
-        KeyValue::new(*key, new_value.clone())
+      .filter(|(_id, data)| **data == serialized)
+      .map(|(_id, data)| {
+        let data = self.deserialize(&*data).unwrap();
+        self.create_doc(_id, data)
+      })
+      .collect();
+    Ok(docs)
+  }
+
+  pub fn update<T>(&self, search: &T, new_value: &T) -> Result<usize>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq,
+  {
+    let mut db = self.write()?;
+    let query = self.serialize(search)?;
+
+    let docs: Vec<Document<T>> = db
+      .iter_mut()
+      .map(|(_id, data)| {
+        (
+          _id,
+          data
+            .lock()
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
+            .unwrap(),
+        )
+      })
+      .filter(|(_id, data)| **data == query)
+      .map(|(_id, mut data)| {
+        *data = self.serialize(new_value).unwrap();
+        self.create_doc(_id, new_value.to_owned())
       })
       .collect();
 
-    let result = kv_pairs.len();
+    let result = docs.len();
     self
       .storage
-      .save(kv_pairs)
-      .context(RdStoreErrorKind::DataSave)?;
+      .persist(&docs)
+      .context(RedDbErrorKind::Datapersist)?;
 
     Ok(result)
   }
 
-  pub fn delete_many<T>(&self, search: &T) -> Result<usize>
+  pub fn delete<T>(&self, search: &T) -> Result<usize>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let keys = self.find_keys(search)?;
-    let kv_pairs: Vec<bool> = keys.iter().map(|key| (self.delete(key).unwrap())).collect();
-    Ok(kv_pairs.len())
+    let ids = self.find_ids(search)?;
+    let docs: Vec<bool> = ids
+      .iter()
+      .map(|_id| (self.delete_one(_id).unwrap()))
+      .collect();
+    Ok(docs.len())
+  }
+
+  fn serialize<T>(&self, data: &T) -> Result<Vec<u8>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    Ok(
+      self
+        .serializer
+        .serialize(data)
+        .context(RedDbErrorKind::Serialization)?,
+    )
+  }
+
+  fn deserialize<T>(&self, data: &[u8]) -> Result<T>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    Ok(
+      self
+        .serializer
+        .deserialize(data)
+        .context(RedDbErrorKind::Deserialization)?,
+    )
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn it_works() {
+    assert_eq!(2 + 2, 4);
   }
 }
