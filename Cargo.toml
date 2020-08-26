@@ -1,13 +1,13 @@
 [package]
-name = "rdstore"
+name = "reddb"
 version = "0.2.0"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
 description = "Minimalistic in-memory data store with persistance"
 keywords = ["store", "memory", "json", "ron", "yaml"]
 categories = ["database", "store", "persistance"]
 
-documentation = "https://docs.rs/rdstore"
-repository = "https://github.com/pmagaz/rdstore"
+documentation = "https://docs.rs/RedDb"
+repository = "https://github.com/pmagaz/RedDb"
 edition = "2018"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
@@ -17,29 +17,29 @@ exclude = [
 ]
 
 [lib]
-name = "rdstore"
+name = "reddb"
 path = "src/lib.rs"
 
 [dependencies]
-uuid = { version = "0.7.4", features = ["serde", "v4"] }
-failure = "0.1.7"
+uuid = { version = "0.8.1", features = ["serde", "v4"] }
+failure = "0.1.8"
 serde = { version = "1.0", features = ["derive"] }
 
 [dependencies.serde_json]
 optional = false
-version = "1.0.51"
+version = "1.0.57"
 
 [dependencies.ron]
 optional = false
-version = "0.5.1"
+version = "0.6.1"
 
 [dependencies.serde_yaml]
 optional = false
-version = "0.8.11"
+version = "0.8.13"
 
 [dependencies.bincode]
 optional = false
-version = "1.2.1"
+version = "1.3.1"
 
 # [features]
 # default = []
@@ -48,4 +48,9 @@ version = "1.2.1"
 # yaml_ser = ["serde_yaml"]
 
 [dev-dependencies]
-criterion = "0.3.1"
+criterion = "0.3.3"
+
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false # Disable features which are enabled by default
+features = ["precommit-hook", "run-cargo-test", "run-cargo-clippy"]

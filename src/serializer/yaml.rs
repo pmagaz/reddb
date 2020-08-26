@@ -13,7 +13,7 @@ pub struct Yaml {
 impl Default for Yaml {
   fn default() -> Yaml {
     Yaml {
-      format: Serializers::Yaml(".yaml.db".to_owned()),
+      format: Serializers::Yaml(".yaml".to_owned()),
     }
   }
 }
@@ -26,18 +26,18 @@ impl<'a> Serializer<'a> for Yaml {
     &self.format
   }
 
-  fn serialize<T>(&self, value: &T) -> Result<Vec<u8>, Error>
+  fn serialize<T>(&self, data: &T) -> Result<Vec<u8>, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    let mut vec = serde_yaml::to_vec(value).unwrap();
-    vec.extend("\n".as_bytes());
+    let mut vec = serde_yaml::to_vec(data).unwrap();
+    vec.extend(b"\n");
     Ok(vec)
   }
-  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T, Error>
+  fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>,
   {
-    Ok(serde_yaml::from_slice::<T>(value).unwrap())
+    Ok(serde_yaml::from_slice::<T>(data).unwrap())
   }
 }
