@@ -7,9 +7,9 @@ pub type Result<T> = ::std::result::Result<T, RedDbError>;
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum RedDbErrorKind {
   //STORAGE
-  #[fail(display = "Storage corrupted!")]
+  #[fail(display = "Data corrupted!")]
   DataCorruption,
-  #[fail(display = "Storage corrupted!")]
+  #[fail(display = "Data compacted corrupted!")]
   Compact,
   #[fail(display = "Could not compact storage")]
   Storagepersist,

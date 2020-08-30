@@ -83,10 +83,10 @@ where
                 .context(RedDbErrorKind::DataCorruption)
                 .unwrap();
 
-            let uuid = document._id;
+            let id = document.id;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
-            map.entry(uuid).or_insert_with(|| Mutex::new(serialized));
+            map.entry(id).or_insert_with(|| Mutex::new(serialized));
         }
 
         self.compact_storage::<T>(&map)
@@ -115,14 +115,14 @@ where
     {
         let data: Vec<u8> = data
             .iter()
-            .map(|(uuid, data)| (uuid, data.lock().unwrap()))
-            .map(|(uuid, data)| {
+            .map(|(id, data)| (id, data.lock().unwrap()))
+            .map(|(id, data)| {
                 let data: T = self
                     .serializer
                     .deserialize(&*data)
                     .context(RedDbErrorKind::DataCorruption)
                     .unwrap();
-                Document::new(*uuid, data)
+                Document::new(*id, data)
             })
             .flat_map(|document| {
                 self.serializer
