@@ -18,9 +18,9 @@ use crate::RedDbHM;
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
-    pub file_path: String,
-    pub serializer: SE,
-    pub db_file: Mutex<File>,
+    file_path: String,
+    serializer: SE,
+    db_file: Mutex<File>,
 }
 
 impl<SE> Storage for FileStorage<SE>
