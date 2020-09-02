@@ -26,9 +26,9 @@ pub type RonDb = RedDb<RonSerializer, FileStorage<RonSerializer>>;
 
 #[derive(Debug)]
 pub struct RedDb<SE, ST> {
-  data: RwLock<RedDbHM>,
   storage: ST,
-  pub serializer: SE,
+  serializer: SE,
+  data: RwLock<RedDbHM>,
 }
 
 impl<'a, SE, ST> RedDb<SE, ST>
@@ -46,8 +46,8 @@ where
       .context(RedDbErrorKind::ContentLoad)?;
 
     Ok(Self {
-      data: RwLock::new(data),
       storage,
+      data: RwLock::new(data),
       serializer: SE::default(),
     })
   }
@@ -299,7 +299,7 @@ mod tests {
     assert_eq!(find.data, doc.data);
   }
   #[test]
-  fn find_ids<'a>() {
+  fn find_ids() {
     let db = RonDb::new::<TestStruct>(".test.db").unwrap();
     let doc: Document<TestStruct> = db
       .insert_data(TestStruct {
