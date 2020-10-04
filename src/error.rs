@@ -2,17 +2,17 @@ use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
 use uuid::Uuid;
 
-pub type Result<T> = ::std::result::Result<T, RdStoreError>;
+pub type Result<T> = ::std::result::Result<T, RedDbError>;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
-pub enum RdStoreErrorKind {
+pub enum RedDbErrorKind {
   //STORAGE
-  #[fail(display = "Storage corrupted!")]
+  #[fail(display = "Data corrupted!")]
   DataCorruption,
-  #[fail(display = "Storage corrupted!")]
+  #[fail(display = "Data compacted corrupted!")]
   Compact,
   #[fail(display = "Could not compact storage")]
-  StorageSave,
+  Storagepersist,
   #[fail(display = "Could not flush data into storage")]
   FlushData,
   #[fail(display = "Could not append data to storage")]
@@ -23,63 +23,63 @@ pub enum RdStoreErrorKind {
   ReadContent,
   #[fail(display = "Could not load storage content")]
   ContentLoad,
-  #[fail(display = "Could not save data into storage")]
-  DataSave,
-  // KEYS
-  #[fail(display = "Could not find key {}", key)]
-  NotFound { key: Uuid },
-  #[fail(display = "Could not delete key")]
+  #[fail(display = "Could not persist data into storage")]
+  Datapersist,
+  // uuids
+  #[fail(display = "Could not find uuid {}", uuid)]
+  NotFound { uuid: Uuid },
+  #[fail(display = "Could not delete uuid")]
   Deletekey,
   #[fail(display = "Could not unlock mutex")]
   Mutex,
   #[fail(display = "Database poisoned!")]
   Poisoned,
-  #[fail(display = "Value poisoned!")]
+  #[fail(display = "data poisoned!")]
   PoisonedValue,
   // SERDE
-  #[fail(display = "Could not deserialize value")]
+  #[fail(display = "Could not deserialize data")]
   Deserialization,
-  #[fail(display = "Could not serialize value")]
+  #[fail(display = "Could not serialize data")]
   Serialization,
 }
 
 #[derive(Debug)]
-pub struct RdStoreError {
-  inner: Context<RdStoreErrorKind>,
+pub struct RedDbError {
+  err: Context<RedDbErrorKind>,
 }
 
-impl RdStoreError {
-  pub fn kind(&self) -> RdStoreErrorKind {
-    *self.inner.get_context()
+impl RedDbError {
+  pub fn kind(&self) -> RedDbErrorKind {
+    *self.err.get_context()
   }
 }
 
-impl From<RdStoreErrorKind> for RdStoreError {
-  fn from(kind: RdStoreErrorKind) -> RdStoreError {
-    RdStoreError {
-      inner: Context::new(kind),
+impl From<RedDbErrorKind> for RedDbError {
+  fn from(kind: RedDbErrorKind) -> RedDbError {
+    RedDbError {
+      err: Context::new(kind),
     }
   }
 }
 
-impl From<Context<RdStoreErrorKind>> for RdStoreError {
-  fn from(inner: Context<RdStoreErrorKind>) -> RdStoreError {
-    RdStoreError { inner }
+impl From<Context<RedDbErrorKind>> for RedDbError {
+  fn from(err: Context<RedDbErrorKind>) -> RedDbError {
+    RedDbError { err }
   }
 }
 
-impl Fail for RdStoreError {
+impl Fail for RedDbError {
   fn cause(&self) -> Option<&dyn Fail> {
-    self.inner.cause()
+    self.err.cause()
   }
 
   fn backtrace(&self) -> Option<&Backtrace> {
-    self.inner.backtrace()
+    self.err.backtrace()
   }
 }
 
-impl Display for RdStoreError {
+impl Display for RedDbError {
   fn fmt(&self, err: &mut fmt::Formatter<'_>) -> fmt::Result {
-    Display::fmt(&self.inner, err)
+    Display::fmt(&self.err, err)
   }
 }

@@ -1,25 +1,22 @@
 use crate::error::Result;
-use crate::StoreHM;
+use crate::RedDbHM;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::marker::Sized;
 
 mod file;
-use crate::kv::KeyValue;
+use crate::document::Document;
 
 pub use file::FileStorage;
 
 pub trait Storage {
-  fn new<T>() -> Result<Self>
+  fn new(db_name: &str) -> Result<Self>
   where
     Self: Sized;
-  fn load_content<T>(&self) -> Result<StoreHM>
+  fn load<T>(&self) -> Result<RedDbHM>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq;
-  fn save<T>(&self, kv_pairs: Vec<KeyValue<T>>) -> Result<()>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug;
-  fn save_one<T>(&self, kv_pair: KeyValue<T>) -> Result<()>
+  fn persist<T>(&self, records: &[Document<T>]) -> Result<()>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug;
 }
