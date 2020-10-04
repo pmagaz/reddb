@@ -167,8 +167,8 @@ where
         storage
             .write_all(&data)
             .context(RedDbErrorKind::AppendData)?;
-        let result = storage.sync_all().context(RedDbErrorKind::AppendData)?;
-        Ok(result)
+        storage.sync_all().context(RedDbErrorKind::AppendData)?;
+        Ok(())
     }
 }
 
