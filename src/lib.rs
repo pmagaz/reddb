@@ -41,10 +41,7 @@ where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
     let storage = ST::new(db_name)?;
-    let data: RedDbHM = storage
-      .load_content::<T>()
-      .context(RedDbErrorKind::ContentLoad)?;
-
+    let data: RedDbHM = storage.load::<T>().context(RedDbErrorKind::ContentLoad)?;
     Ok(Self {
       storage,
       data: RwLock::new(data),
@@ -288,7 +285,7 @@ mod tests {
   }
 
   #[test]
-  fn insert_data<'a>() {
+  fn insert_data() {
     let db = RonDb::new::<TestStruct>(".test.db").unwrap();
     let _id = &Uuid::new_v4();
     let data = TestStruct {

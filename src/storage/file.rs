@@ -51,27 +51,13 @@ where
         })
     }
 
-    fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
-    where
-        for<'de> T: Serialize + Deserialize<'de> + Debug,
-    {
-        let serialized: Vec<u8> = data
-            .iter()
-            .flat_map(|document| self.serializer.serialize(document).unwrap())
-            .collect();
-
-        self.append(&serialized)
-            .context(RedDbErrorKind::AppendData)?;
-        Ok(())
-    }
-
-    fn load_content<T>(&self) -> Result<RedDbHM>
+    fn load<T>(&self) -> Result<RedDbHM>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         let mut map: RedDbHM = HashMap::new();
         let mut buf = Vec::new();
-        self.read_content(&mut buf)
+        self.read_data(&mut buf)
             .context(RedDbErrorKind::ContentLoad)?;
 
         for (_index, content) in buf.lines().enumerate() {
@@ -86,12 +72,28 @@ where
             let id = document.id;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
+            // map.insert(id, Mutex::new(serialized));
             map.entry(id).or_insert_with(|| Mutex::new(serialized));
         }
 
-        self.compact_storage::<T>(&map)
-            .context(RedDbErrorKind::Compact)?;
+        // self.compact_data::<T>(&map)
+        //     .context(RedDbErrorKind::Compact)?;
+        //println!("{:?}leches", map.len());
         Ok(map)
+    }
+
+    fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug,
+    {
+        let serialized: Vec<u8> = data
+            .iter()
+            .flat_map(|document| self.serializer.serialize(document).unwrap())
+            .collect();
+
+        self.append(&serialized)
+            .context(RedDbErrorKind::AppendData)?;
+        Ok(())
     }
 }
 
@@ -99,17 +101,18 @@ impl<SE> FileStorage<SE>
 where
     for<'de> SE: Serializer<'de> + Debug,
 {
-    fn read_content(&self, mut buf: &mut Vec<u8>) -> Result<usize> {
+    fn read_data(&self, mut buf: &mut Vec<u8>) -> Result<usize> {
         let content = self
             .db_file
             .try_lock()
             .unwrap()
             .read_to_end(&mut buf)
             .context(RedDbErrorKind::ReadContent)?;
+
         Ok(content)
     }
 
-    pub fn compact_storage<T>(&self, data: &RedDbHM) -> Result<()>
+    pub fn compact_data<T>(&self, data: &RedDbHM) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
@@ -135,6 +138,7 @@ where
         if self.storage_exists() {
             self.flush_data(&self.file_path, &data)?;
         }
+
         Ok(())
     }
 
@@ -151,8 +155,8 @@ where
         storage
             .write_all(&data)
             .context(RedDbErrorKind::FlushData)?;
-        storage.sync_all().context(RedDbErrorKind::FlushData)?;
-        Ok(())
+        let result = storage.sync_all().context(RedDbErrorKind::FlushData)?;
+        Ok(result)
     }
 
     fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
@@ -163,7 +167,49 @@ where
         storage
             .write_all(&data)
             .context(RedDbErrorKind::AppendData)?;
-        storage.sync_all().context(RedDbErrorKind::AppendData)?;
-        Ok(())
+        let result = storage.sync_all().context(RedDbErrorKind::AppendData)?;
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Document;
+    use crate::RonSerializer;
+    use crate::Uuid;
+
+    #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
+    struct TestStruct {
+        foo: String,
+    }
+
+    #[test]
+    fn persist_and_load_data<'a>() {
+        let storage = FileStorage::<RonSerializer>::new("file_test").unwrap();
+        let doc_one = Document::new(
+            Uuid::new_v4(),
+            TestStruct {
+                foo: "one".to_owned(),
+            },
+        );
+        let doc_two = Document::new(
+            Uuid::new_v4(),
+            TestStruct {
+                foo: "one".to_owned(),
+            },
+        );
+        let arr_docs = vec![doc_one.clone(), doc_two.clone()];
+        let _persisted = storage.persist(&arr_docs);
+        // let map: RedDbHM = storage.load::<TestStruct>().unwrap();
+        // println!("{:?}", doc_one.id);
+        // println!("{:?}", doc_two.id);
+        // println!("{:?}eeee", map.len());
+        // map.get(&doc_one.id).unwrap();
+        // let one: TestStruct = storage
+        //     .serializer
+        //     .deserialize(&map.get(&doc_one.id).unwrap().lock().unwrap())
+        //     .unwrap();
+        // assert_eq!(one, doc_one.data);
     }
 }
