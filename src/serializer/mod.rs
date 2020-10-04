@@ -24,7 +24,7 @@ pub trait Serializer<'a>: Default {
   where
     for<'de> T: Serialize + Deserialize<'de>;
 
-  fn deserialize<T>(&self, val: &Vec<u8>) -> Result<T, Error>
+  fn deserialize<T>(&self, val: &[u8]) -> Result<T, Error>
   where
     for<'de> T: Serialize + Deserialize<'de>;
 }

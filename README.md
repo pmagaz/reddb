@@ -1,13 +1,13 @@
-# RedStore (In development!)
+# RedDb
 
-`RedStore` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml)RedStore has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data. 
+`RedDb` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data. 
 
 ## Quickstart
 
-Add RedStore to your `Cargo.toml` specifing what serializer you want to use: 
+Add RedDb to your `Cargo.toml` specifing what serializer you want to use: 
 
 ```toml
-[dependencies.RedStore]
+[dependencies.RedDb]
 version = "0.2.0"
 features = ["json_ser"] # Json serialization / deserialization
 features = ["ron_ser"] # Ron serialization / deserialization
@@ -16,7 +16,7 @@ features = ["yaml_ser"] # Yaml serialization / deserialization
 
 
 ```rust
-use RedStore::{RonStore,JsonStore,YamlStore};
+use RedDb::{Document, RonDb,JsonStore,YamlStore};
 
 #[derive(Clone, Serialize, PartialEq, Deserialize)]
 struct MyStruct {
@@ -24,26 +24,32 @@ struct MyStruct {
 }
 
 fn main() -> Result<()> {
-  // RedStore with RON persistance for MyStruct documents
-  let db = RonStore::new::<MyStruct>()?;
+  // RedDb with RON persistance for MyStruct documents
+  let db = RonDb::new::<MyStruct>()?;
 
   let my_struct = MyStruct {
     foo: String::from("hello")
   };
 
   // Insert data
-  let _id = db.insert_one(my_struct)?;
-  // Find by ID
-  let result: MyStruct = db.find_one(&id)?;
+  let doc: Document<MyStruct> = db.insert_one(my_struct)?;
+  // Find by uuid
+  let my_doc: Document<MyStruct> = db.find_one(&doc.uuid)?;
   // Find all records equal to my_struct
-  let result = db.find(&my_struct)?;
+  let my_docs : Vec<Document<MyStruct>> = db.find(&my_struct)?;
   Ok(())
 }
-
 ```
+
+## Why
+RedDb is the migration of a side project originally wrote in NodeJs that was designed to store objects in memory (with hd persistance) and do searchs on them.
+
+## When 
+If you are looking for a some short of Key/Value  you will find better options. If you are looking for an embedded fast, lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice. 
 
 ## API
 
+- [Data](#data)
 - [Peristantce](#persistance)
 - [Inserting data](#inserting-data)
 - [Finding data](#finding-data)
@@ -51,16 +57,28 @@ fn main() -> Result<()> {
 - [Deleting data](#deleting-data)
 
 
+### Data
+
+Data is serialized and deserialized in different serde-compatible formats (json, ron, yaml) and wrapped into the Document struct as follows:
+
+```rust
+pub struct Document<T> {
+  pub id: Uuid,
+  pub data: T,
+}
+```
+
+Since data field is a generic you can store any kind of data you want. As you will see on the API, Document&lt;T> is the default return type for most operations.
+
 ### Persistance
 
-RedStore's persistence uses an append-only format (AOF) so all write operations are added to to the end of the database file. The database is automatically compacted in just one line per object/data/record everytime you start the database in your application.
+RedDb's persistence uses an append-only format (AOF) so all write operations are added to to the end of the database file. The database is automatically compacted in just one line per object/record everytime you start the database in your application.
 
-The API provides bulk-like write operations (insert, update, delete) for vectors of data that are faster to persist due to the AOF nature. Use them instead iterate over the `*_one()` methods you'll see on the API.
-
+The API provides bulk-like write operations (insert & update) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
 
 ### Inserting Data
 
-Redstore use UUID identifiers as unique ids. An UUid will be returned when you insert a record.
+RedDb use uuid identifiers as unique ids. An uuid will be returned when you insert a record.
 
 #### Insert one
 
@@ -74,8 +92,8 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let id = store.insert_one(my_struct)?;
-println!("{:?}", id);
+let doc: Document<TestStruct> = store.insert_one(my_struct)?;
+println!("{:?}", doc.uuid);
 // 94d69737-4b2e-4985-aaa1-e28bbff2e6d0
 ```
 
@@ -84,35 +102,31 @@ println!("{:?}", id);
 If you want to insert a vector of data `insert()` is more suitable and faster to persists than iterate over `insert_one()` method due to the nature of the AOF persistance. 
 
 ```rust
-let many = vec![MyStruct {
+let my_docs = vec![MyStruct {
   foo: String::from("one"),
 },
 MyStruct {
   foo: String::from("two"),
 }];
 
-let inserted_ids = db.insert(many)?;
-println!("{:?}", inserted_ids);
-// [94d69737-4b2e-4985-aaa1-e28bbff2e6d0, 94d641737-4b2e-4985-aaa1-e28bbff2e6d0]
+let docs: Vec<Document<MyStruct>> = db.insert(my_docs)?;
 ```
 
 ### Finding Data
 
-There are two  ways to find your data. By it's ID or looking into the database what data matches your query.
+There are two  ways to find your data. By it's uuid or looking into the database what data matches your query.
 
 #### Find one
 
-Performs a search by ID.
+Performs a search by uuid.
 
 ```rust
 let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let id = db.insert_one(my_struct)?;
-let result: MyStruct = db.find_one(&id)?;
-println!("{:?}", result);
-// MyStruct { foo: "hello" }
+let inserted_doc : Document<TestStruct> = db.insert_one(my_struct)?;
+let doc: Document<MyStruct> = db.find_one(&inserted_doc.uuid)?;
 ```
 
 #### Find
@@ -134,13 +148,8 @@ let three = MyStruct {
 
 
 let many = vec![one.clone(), two.clone(), three.clone()];
-let id = db.insert(many)?;
-let result = db.find(&one)?;
-println!("{:?}", result);
-/* [
-MyStruct { foo: "Hello" },
-MyStruct { foo: "Hello" }
-]*/
+let inserted_doc : Document<MyStruct> = db.insert(many)?;
+let docs: Vec<Document<MyStruct>> = db.find(&one)?;
 ```
 
 ### Updating Data
@@ -149,7 +158,7 @@ Update data is pretty straightforward. You can update data
 
 #### Update one
 
-Update one record, using it's id as search param.
+Update one record, using it's uuid as search param.
 
 ```rust
 let my_struct = MyStruct {
@@ -160,15 +169,13 @@ let new_value = MyStruct {
   foo: String::from("bye"),
 };
 
-let id = db.insert_one(my_struct)?;
-let updated = db.update_one(&id, new_value))?;
-println!("{:?}", upated);
-// true
+let inserted_doc : Document<MyStruct> = db.insert_one(my_struct)?;
+let updated: bool = db.update_one(&inserted_doc.uuid, new_value))?;
 ```
 
 #### Update 
 
-You can update all data in the databas that matches your query param.
+You can update all data in the databas that matches your query param. Update will return the number of updated documents.
 
 ```rust
 let search = MyStruct {
@@ -179,26 +186,22 @@ let new_value = MyStruct {
   foo: String::from("bye"),
 };
 
-let updated = store.update(&search, &new_value)?;
-println!("{:?}", updated);
-// 1
+let updated: usize = store.update(&search, &new_value)?;
 ```
 
 ### Deleting Data
 
 #### Delete one
 
-Delete a record by it's ID.
+Delete a record by it's uuid.
 
 ```rust
 let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let id = db.insert_one(my_struct)?;
-let deleted = db.delete_one(&id))?;
-println!("{:?}", deleted);
-// true
+let doc: Document<MyStruct> = db.insert_one(my_struct)?;
+let deleted : bool = db.delete_one(&doc.uuid))?;
 ```
 
 #### Delete 

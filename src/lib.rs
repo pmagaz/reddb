@@ -1,267 +1,448 @@
-use core::fmt::Display;
 use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
-mod serializer;
-
+mod document;
 mod error;
-mod kv;
-mod operation;
+mod serializer;
 mod storage;
 
-use error::{RdStoreErrorKind, Result};
-use kv::KeyValue;
-use serializer::Serializer;
-pub use serializer::{JsonSerializer, RonSerializer, YamlSerializer};
+pub use document::Document;
+use error::{RedDbErrorKind, Result};
+pub use serializer::{JsonSerializer, RonSerializer, Serializer, YamlSerializer};
 use std::collections::HashMap;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use storage::FileStorage;
 use storage::Storage;
 
-pub type ByteString = Vec<u8>;
-pub type StoreHM = HashMap<Uuid, Mutex<ByteString>>;
+pub type RedDbHM = HashMap<Uuid, Mutex<Vec<u8>>>;
 
 //#[cfg(feature = "json_ser")]
-pub type JsonStore = RdStore<JsonSerializer, FileStorage<JsonSerializer>>;
+pub type JsonDb = RedDb<JsonSerializer, FileStorage<JsonSerializer>>;
 //#[cfg(feature = "yaml_ser")]
-pub type YamlStore = RdStore<YamlSerializer, FileStorage<YamlSerializer>>;
+pub type YamlDb = RedDb<YamlSerializer, FileStorage<YamlSerializer>>;
 //#[cfg(feature = "ron_ser")]
-pub type RonStore = RdStore<RonSerializer, FileStorage<RonSerializer>>;
+pub type RonDb = RedDb<RonSerializer, FileStorage<RonSerializer>>;
 
 #[derive(Debug)]
-pub struct RdStore<SE, ST> {
-  pub store: RwLock<StoreHM>,
-  pub storage: ST,
-  pub serializer: SE,
+pub struct RedDb<SE, ST> {
+  storage: ST,
+  serializer: SE,
+  data: RwLock<RedDbHM>,
 }
 
-impl<'a, SE, ST> RdStore<SE, ST>
+impl<'a, SE, ST> RedDb<SE, ST>
 where
   for<'de> SE: Serializer<'de> + Debug,
   for<'de> ST: Storage + Debug,
 {
-  pub fn new<T>() -> Result<Self>
+  pub fn new<T>(db_name: &str) -> Result<Self>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq + Clone,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let storage = ST::new::<T>()?;
-    let data: StoreHM = storage
-      .load_content::<T>()
-      .context(RdStoreErrorKind::ContentLoad)?;
-
+    let storage = ST::new(db_name)?;
+    let data: RedDbHM = storage.load::<T>().context(RedDbErrorKind::ContentLoad)?;
     Ok(Self {
-      store: RwLock::new(data),
-      storage: storage,
+      storage,
+      data: RwLock::new(data),
       serializer: SE::default(),
     })
   }
-  pub fn read(&'a self) -> Result<RwLockReadGuard<'a, StoreHM>> {
-    let lock = self.store.read().map_err(|_| RdStoreErrorKind::Poisoned)?;
+
+  fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
+    let lock = self.data.read().map_err(|_| RedDbErrorKind::Poisoned)?;
     Ok(lock)
   }
 
-  fn write(&'a self) -> Result<RwLockWriteGuard<'a, StoreHM>> {
-    let lock = self.store.write().map_err(|_| RdStoreErrorKind::Poisoned)?;
+  fn write(&'a self) -> Result<RwLockWriteGuard<'a, RedDbHM>> {
+    let lock = self.data.write().map_err(|_| RedDbErrorKind::Poisoned)?;
     Ok(lock)
   }
 
-  fn serialize<T>(&self, value: &T) -> Result<ByteString>
+  fn create_doc<T>(&self, id: &Uuid, value: T) -> Document<T>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    Document::new(*id, value)
+  }
+
+  fn insert_data<T>(&self, value: T) -> Result<Document<T>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let mut data = self.write()?;
+    let id = Uuid::new_v4();
+    let serialized = self.serialize(&value)?;
+    data.insert(id, Mutex::new(serialized));
+    Ok(self.create_doc(&id, value))
+  }
+
+  fn find_ids<T>(&self, search: &T) -> Result<Vec<Uuid>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let data = self.read()?;
+    let serialized = self.serialize(search)?;
+    let docs: Vec<Uuid> = data
+      .iter()
+      .map(|(id, value)| {
+        (
+          id,
+          value
+            .lock()
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
+            .unwrap(),
+        )
+      })
+      .filter(|(_id, value)| **value == serialized)
+      .map(|(id, _value)| *id)
+      .collect();
+    Ok(docs)
+  }
+
+  pub fn insert_one<T>(&self, value: T) -> Result<Document<T>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq,
+  {
+    let doc = self.insert_data(value).unwrap();
+    self
+      .storage
+      .persist(&[doc.to_owned()])
+      .context(RedDbErrorKind::Datapersist)?;
+    Ok(doc)
+  }
+
+  pub fn find_one<T>(&self, id: &Uuid) -> Result<Document<T>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let data = self.read()?;
+    let data = data
+      .get(&id)
+      .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
+
+    let guard = data.lock().map_err(|_| RedDbErrorKind::PoisonedValue)?;
+    let data = self.deserialize(&*guard)?;
+    let doc = self.create_doc(id, data);
+    Ok(doc)
+  }
+
+  pub fn update_one<T>(&'a self, id: &Uuid, new_value: T) -> Result<bool>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let mut data = self.write()?;
+    if data.contains_key(id) {
+      let data = data
+        .get_mut(&id)
+        .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
+
+      let mut guard = data.lock().map_err(|_| RedDbErrorKind::PoisonedValue)?;
+      *guard = self.serialize(&new_value)?;
+      let doc = self.create_doc(id, new_value);
+      self
+        .storage
+        .persist(&[doc])
+        .context(RedDbErrorKind::Datapersist)?;
+      Ok(true)
+    } else {
+      Ok(false)
+    }
+  }
+
+  pub fn delete_one(&self, id: &Uuid) -> Result<bool> {
+    let mut data = self.data.write().unwrap();
+    if data.contains_key(id) {
+      data.remove(id).unwrap();
+      Ok(true)
+    } else {
+      Ok(false)
+    }
+  }
+
+  pub fn insert<T>(&self, values: Vec<T>) -> Result<Vec<Document<T>>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let docs: Vec<Document<T>> = values
+      .into_iter()
+      .map(|data| self.insert_data(data).unwrap())
+      .collect();
+
+    self
+      .storage
+      .persist(&docs)
+      .context(RedDbErrorKind::Datapersist)?;
+
+    Ok(docs)
+  }
+
+  pub fn find<T>(&self, search: &T) -> Result<Vec<Document<T>>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let data = self.read()?;
+    let serialized = self.serialize(search)?;
+    let docs: Vec<Document<T>> = data
+      .iter()
+      .map(|(id, data)| {
+        (
+          id,
+          data
+            .lock()
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
+            .unwrap(),
+        )
+      })
+      .filter(|(_id, data)| **data == serialized)
+      .map(|(id, data)| {
+        let data = self.deserialize(&*data).unwrap();
+        self.create_doc(id, data)
+      })
+      .collect();
+    Ok(docs)
+  }
+
+  pub fn update<T>(&self, search: &T, new_value: &T) -> Result<usize>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq,
+  {
+    let mut data = self.write()?;
+    let query = self.serialize(search)?;
+
+    let docs: Vec<Document<T>> = data
+      .iter_mut()
+      .map(|(id, data)| {
+        (
+          id,
+          data
+            .lock()
+            .map_err(|_| RedDbErrorKind::PoisonedValue)
+            .unwrap(),
+        )
+      })
+      .filter(|(_id, data)| **data == query)
+      .map(|(id, mut data)| {
+        *data = self.serialize(new_value).unwrap();
+        self.create_doc(id, new_value.to_owned())
+      })
+      .collect();
+
+    let result = docs.len();
+    self
+      .storage
+      .persist(&docs)
+      .context(RedDbErrorKind::Datapersist)?;
+
+    Ok(result)
+  }
+
+  pub fn delete<T>(&self, search: &T) -> Result<usize>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let ids = self.find_ids(search)?;
+    let docs: Vec<bool> = ids
+      .iter()
+      .map(|id| (self.delete_one(id).unwrap()))
+      .collect();
+    Ok(docs.len())
+  }
+
+  fn serialize<T>(&self, value: &T) -> Result<Vec<u8>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
     Ok(
       self
         .serializer
         .serialize(value)
-        .context(RdStoreErrorKind::Serialization)?,
+        .context(RedDbErrorKind::Serialization)?,
     )
   }
 
-  fn deserialize<T>(&self, value: &Vec<u8>) -> Result<T>
+  fn deserialize<T>(&self, value: &[u8]) -> Result<T>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
     Ok(
       self
         .serializer
         .deserialize(value)
-        .context(RdStoreErrorKind::Deserialization)?,
+        .context(RedDbErrorKind::Deserialization)?,
     )
   }
+}
 
-  fn insert_key_value(&self, key: Uuid, data: ByteString) -> Option<Mutex<ByteString>> {
-    let mut store = self.store.write().unwrap();
-    store.insert(key, Mutex::new(data))
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+
+  #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
+  struct TestStruct {
+    foo: String,
   }
 
-  pub fn find_keys<T>(&self, search: &T) -> Result<Vec<Uuid>>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let store = self.read()?;
-    let serialized = self.serialize(search)?;
-    let kv_pairs: Vec<Uuid> = store
-      .iter()
-      .map(|(_key, value)| {
-        (
-          _key,
-          value
-            .lock()
-            .map_err(|_| RdStoreErrorKind::PoisonedValue)
-            .unwrap(),
-        )
+  #[test]
+  fn insert_data() {
+    let db = RonDb::new::<TestStruct>(".test.db").unwrap();
+    let _id = &Uuid::new_v4();
+    let data = TestStruct {
+      foo: "test".to_owned(),
+    };
+    let doc: Document<TestStruct> = db.insert_data(data).unwrap();
+    let find: Document<TestStruct> = db.find_one(&doc.id).unwrap();
+    assert_eq!(find.data, doc.data);
+  }
+  #[test]
+  fn find_ids() {
+    let db = RonDb::new::<TestStruct>(".test.db").unwrap();
+    let doc: Document<TestStruct> = db
+      .insert_data(TestStruct {
+        foo: "test".to_owned(),
       })
-      .filter(|(_key, value)| **value == serialized)
-      .map(|(key, _value)| *key)
-      .collect();
-    Ok(kv_pairs)
-  }
+      .unwrap();
 
-  pub fn insert<T>(&self, value: T) -> Result<Uuid>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let key = Uuid::new_v4();
-    let data = self.serialize(&value)?;
-    let _result = self.insert_key_value(key, data);
-    self
-      .storage
-      .save_one(KeyValue::new(key, value))
-      .context(RdStoreErrorKind::DataSave)?;
-    Ok(key)
-  }
-
-  pub fn find<T>(&self, key: &Uuid) -> Result<T>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let store = self.read()?;
-    let value = store
-      .get(&key)
-      .ok_or(RdStoreErrorKind::NotFound { key: *key })?;
-    let guard = value.lock().map_err(|_| RdStoreErrorKind::PoisonedValue)?;
-    let result = self.deserialize(&*guard)?;
-    Ok(result)
-  }
-
-  pub fn update<T>(&'a self, key: &Uuid, new_value: T) -> Result<bool>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let mut store = self.write()?;
-    if store.contains_key(key) {
-      let value = store
-        .get_mut(&key)
-        .ok_or(RdStoreErrorKind::NotFound { key: *key })?;
-
-      let mut guard = value.lock().map_err(|_| RdStoreErrorKind::PoisonedValue)?;
-      *guard = self.serialize(&new_value)?;
-
-      self
-        .storage
-        .save_one(KeyValue::new(*key, new_value))
-        .context(RdStoreErrorKind::DataSave)?;
-      Ok(true)
-    } else {
-      Ok(false)
-    }
-  }
-
-  pub fn delete(&self, key: &Uuid) -> Result<bool> {
-    let mut store = self.store.write().unwrap();
-    if store.contains_key(key) {
-      store.remove(key).unwrap();
-      Ok(true)
-    } else {
-      Ok(false)
-    }
-  }
-
-  pub fn insert_many<T>(&self, values: Vec<T>) -> Result<usize>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let kv_pairs: Vec<KeyValue<T>> = values
-      .into_iter()
-      .map(|value| {
-        let key = Uuid::new_v4();
-        let serialized = self.serialize(&value).unwrap();
-        let _result = self.insert_key_value(key, serialized);
-        KeyValue::new(key, value)
+    let doc2: Document<TestStruct> = db
+      .insert_data(TestStruct {
+        foo: "test2".to_owned(),
       })
-      .collect();
+      .unwrap();
 
-    let result = kv_pairs.len();
-    println!("{:?}", result);
-    self
-      .storage
-      .save(kv_pairs)
-      .context(RdStoreErrorKind::DataSave)?;
+    let doc3: Document<TestStruct> = db
+      .insert_data(TestStruct {
+        foo: "test".to_owned(),
+      })
+      .unwrap();
+    let ids: Vec<Uuid> = db
+      .find_ids(&TestStruct {
+        foo: "test".to_owned(),
+      })
+      .unwrap();
 
-    Ok(result)
+    assert_eq!(ids.contains(&doc.id), true);
+    assert_eq!(ids.contains(&doc2.id), false);
+    assert_eq!(ids.contains(&doc3.id), true);
+
+    fs::remove_file(".test.db.ron").unwrap();
+  }
+  #[test]
+  fn insert_and_find_one() {
+    let db = RonDb::new::<TestStruct>(".insert_and_find_one.db").unwrap();
+    let doc: Document<TestStruct> = db
+      .insert_one(TestStruct {
+        foo: "test".to_owned(),
+      })
+      .unwrap();
+
+    let find: Document<TestStruct> = db.find_one(&doc.id).unwrap();
+    assert_eq!(find.id, doc.id);
+    assert_eq!(find.data, doc.data);
+
+    fs::remove_file(".insert_and_find_one.db.ron").unwrap();
+  }
+  #[test]
+  fn find() {
+    let db = RonDb::new::<TestStruct>(".find.db").unwrap();
+
+    let one = TestStruct {
+      foo: String::from("one"),
+    };
+
+    let two = TestStruct {
+      foo: String::from("two"),
+    };
+
+    let many = vec![one.clone(), one.clone(), two.clone()];
+    db.insert(many).unwrap();
+    let result = db.find(&one).unwrap();
+    assert_eq!(result.len(), 2);
+    fs::remove_file(".find.db.ron").unwrap();
+  }
+  #[test]
+  fn update_one() {
+    let db = RonDb::new::<TestStruct>(".update_one.db").unwrap();
+    let original = TestStruct {
+      foo: "hi".to_owned(),
+    };
+
+    let updated = TestStruct {
+      foo: "bye".to_owned(),
+    };
+
+    let doc = db.insert_one(original.clone()).unwrap();
+    db.update_one(&doc.id, updated.clone()).unwrap();
+    let result: Document<TestStruct> = db.find_one(&doc.id).unwrap();
+    assert_eq!(result.data, updated);
+    fs::remove_file(".update_one.db.ron").unwrap();
   }
 
-  pub fn find_many<T>(&self, search: &T) -> Result<Vec<T>>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let store = self.read()?;
-    let serialized = self.serialize(search)?;
-    let kv_pairs: Vec<T> = store
-      .iter()
-      .map(|(_key, value)| {
-        value
-          .lock()
-          .map_err(|_| RdStoreErrorKind::PoisonedValue)
-          .unwrap()
-      })
-      .filter(|value| **value == serialized)
-      .map(|value| self.deserialize(&*value).unwrap())
-      .collect();
-    Ok(kv_pairs)
+  #[test]
+  fn update() {
+    let db = RonDb::new::<TestStruct>(".update.db").unwrap();
+    let one = TestStruct {
+      foo: String::from("one"),
+    };
+    let two = TestStruct {
+      foo: String::from("two"),
+    };
+
+    let many = vec![one.clone(), one.clone(), two.clone()];
+    db.insert(many).unwrap();
+    let updated = db.update(&one, &two).unwrap();
+    assert_eq!(updated, 2);
+    let result = db.find(&two).unwrap();
+    assert_eq!(result.len(), 3);
+    fs::remove_file(".update.db.ron").unwrap();
+  }
+  #[test]
+  fn delete_and_find_one() {
+    let db = RonDb::new::<TestStruct>(".delete_one.db").unwrap();
+    let search = TestStruct {
+      foo: "test".to_owned(),
+    };
+
+    let doc = db.insert_one(search.clone()).unwrap();
+    let deleted = db.delete_one(&doc.id).unwrap();
+    assert_eq!(deleted, true);
+
+    let not_deleted = db.delete_one(&doc.id).unwrap();
+    assert_eq!(not_deleted, false);
+    fs::remove_file(".delete_one.db.ron").unwrap();
   }
 
-  pub fn update_many<T>(&self, search: &T, new_value: &T) -> Result<usize>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + Display + PartialEq,
-  {
-    let mut store = self.write()?;
-    let serialized = self.serialize(search)?;
+  #[test]
+  fn delete() {
+    let db = RonDb::new::<TestStruct>(".delete.db").unwrap();
+    let one = TestStruct {
+      foo: "one".to_owned(),
+    };
 
-    let kv_pairs: Vec<KeyValue<T>> = store
-      .iter_mut()
-      .map(|(_key, value)| {
-        (
-          _key,
-          value
-            .lock()
-            .map_err(|_| RdStoreErrorKind::PoisonedValue)
-            .unwrap(),
-        )
-      })
-      .filter(|(_key, value)| **value == serialized)
-      .map(|(key, mut value)| {
-        *value = self.serialize(new_value).unwrap();
-        KeyValue::new(*key, new_value.clone())
-      })
-      .collect();
+    let two = TestStruct {
+      foo: "two".to_owned(),
+    };
 
-    let result = kv_pairs.len();
-    self
-      .storage
-      .save(kv_pairs)
-      .context(RdStoreErrorKind::DataSave)?;
+    let many = vec![one.clone(), one.clone(), two.clone()];
+    db.insert(many).unwrap();
+    let deleted = db.delete(&one).unwrap();
+    assert_eq!(deleted, 2);
 
-    Ok(result)
+    let not_deleted = db.delete(&one).unwrap();
+    assert_eq!(not_deleted, 0);
+    fs::remove_file(".delete.db.ron").unwrap();
   }
-
-  pub fn delete_many<T>(&self, search: &T) -> Result<usize>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Display + PartialEq,
-  {
-    let keys = self.find_keys(search)?;
-    let kv_pairs: Vec<bool> = keys.iter().map(|key| (self.delete(key).unwrap())).collect();
-    Ok(kv_pairs.len())
+  #[test]
+  fn serialie_deserialize() {
+    let db = RonDb::new::<TestStruct>(".test.db").unwrap();
+    let test = TestStruct {
+      foo: "one".to_owned(),
+    };
+    let byte_str = [40, 102, 111, 111, 58, 34, 111, 110, 101, 34, 41, 10];
+    let serialized = db.serializer.serialize(&test).unwrap();
+    assert_eq!(serialized, byte_str);
+    let deserialized: TestStruct = db.serializer.deserialize(&byte_str).unwrap();
+    assert_eq!(deserialized, test);
+    fs::remove_file(".test.db.ron").unwrap();
   }
 }

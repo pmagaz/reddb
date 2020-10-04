@@ -1,141 +1,133 @@
-use rdstore::RonStore;
+use reddb::{Document, RonDb};
+use ron::ser;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
+use std::fs::File;
 use std::io::Error;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
+use uuid::Uuid;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+fn setup() -> Result<()> {
+  if Path::new(".db.yaml").exists() {
+    fs::remove_file(".db.yaml").unwrap();
+  }
+  Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
-struct MyStruct {
+struct TestStruct {
   foo: String,
 }
 
-impl fmt::Display for MyStruct {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "({})", self)
+#[test]
+fn insert_one_and_persist<'a>() {
+  let db = RonDb::new::<TestStruct>(".insert_one_persist.db").unwrap();
+  let doc: Document<TestStruct> = db
+    .insert_one(TestStruct {
+      foo: "test".to_owned(),
+    })
+    .unwrap();
+
+  let file = File::open(".insert_one_persist.db.ron").unwrap();
+  let buffered = BufReader::new(file);
+
+  for line in buffered.lines() {
+    let byte_str = &line.unwrap().into_bytes();
+    let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+    assert_eq!(doc, persisted);
   }
+  fs::remove_file(".insert_one_persist.db.ron").unwrap();
 }
-
-fn setup() -> Result<()> {
-  if Path::new(".ron.db").exists() {
-    fs::remove_file(".ron.db").unwrap();
+#[test]
+fn insert_and_persist<'a>() {
+  let db = RonDb::new::<TestStruct>(".insert_persist.db").unwrap();
+  let one = TestStruct {
+    foo: "one".to_owned(),
+  };
+  let two = TestStruct {
+    foo: "two".to_owned(),
+  };
+  let arr_docs = vec![one.clone(), two.clone()];
+  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).unwrap();
+  let file = File::open(".insert_persist.db.ron").unwrap();
+  let buffered = BufReader::new(file);
+  for line in buffered.lines() {
+    let byte_str = &line.unwrap().into_bytes();
+    let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+    assert_eq!(inserted.contains(&persisted), true);
   }
-  Ok(())
+  fs::remove_file(".insert_persist.db.ron").unwrap();
 }
-
 #[test]
-fn find() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-  let search = MyStruct {
-    foo: String::from("hi"),
+fn update_one_and_persist<'a>() {
+  let db = RonDb::new::<TestStruct>(".update_one_persist.db").unwrap();
+  let doc: Document<TestStruct> = db
+    .insert_one(TestStruct {
+      foo: "test".to_owned(),
+    })
+    .unwrap();
+  let update = TestStruct {
+    foo: "updated".to_owned(),
   };
-
-  let id = store.insert(search.clone()).unwrap();
-  let result: MyStruct = store.find(&id).unwrap();
-  assert_eq!(result, search);
-  Ok(())
+  db.update_one(&doc.id, update.clone()).unwrap();
+  let updated: Document<TestStruct> = db.find_one(&doc.id).unwrap();
+  let file = File::open(".update_one_persist.db.ron").unwrap();
+  let buffered = BufReader::new(file);
+  let mut key = 1;
+  for line in buffered.lines() {
+    let byte_str = &line.unwrap().into_bytes();
+    let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+    match key {
+      1 => assert_eq!(doc, persisted),
+      2 => assert_eq!(persisted, updated),
+      _ => println!("Woops!"),
+    }
+    key += key;
+  }
+  fs::remove_file(".update_one_persist.db.ron").unwrap();
 }
-
 #[test]
-fn find_many() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-
-  let one = MyStruct {
-    foo: String::from("one"),
+fn update_and_persist<'a>() {
+  let db = RonDb::new::<TestStruct>(".update_persist.db").unwrap();
+  let one = TestStruct {
+    foo: "search".to_owned(),
   };
-
-  let two = MyStruct {
-    foo: String::from("two"),
+  let two = TestStruct {
+    foo: "other".to_owned(),
   };
-
-  let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let result = store.find_many(&one).unwrap();
-  assert_eq!(result.len(), 2);
-  Ok(())
-}
-
-#[test]
-fn delete() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-  let search = MyStruct {
-    foo: String::from("hi"),
+  let updated = TestStruct {
+    foo: "updated".to_owned(),
   };
+  let arr_docs = vec![one.clone(), one.clone(), two.clone()];
+  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).unwrap();
+  let num_updated = db.update(&one, &updated).unwrap();
+  assert_eq!(num_updated, 2);
 
-  let id = store.insert(search.clone()).unwrap();
-  let deleted = store.delete(&id).unwrap();
-  assert_eq!(deleted, true);
-
-  let not_deleted = store.delete(&id).unwrap();
-  assert_eq!(not_deleted, false);
-  Ok(())
-}
-
-#[test]
-fn delete_many() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-
-  let one = MyStruct {
-    foo: String::from("one"),
-  };
-
-  let two = MyStruct {
-    foo: String::from("two"),
-  };
-
-  let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let deleted = store.delete_many(&one).unwrap();
-  assert_eq!(deleted, 2);
-
-  let not_deleted = store.delete_many(&one).unwrap();
-  assert_eq!(not_deleted, 0);
-  Ok(())
-}
-
-#[test]
-fn update() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-  let original = MyStruct {
-    foo: String::from("hi"),
-  };
-
-  let updated = MyStruct {
-    foo: String::from("bye"),
-  };
-
-  let id = store.insert(original.clone()).unwrap();
-  store.update(&id, updated.clone()).unwrap();
-  let result: MyStruct = store.find(&id).unwrap();
-  assert_eq!(result, updated);
-  Ok(())
-}
-
-#[test]
-fn update_many() -> Result<()> {
-  setup().unwrap();
-  let store = RonStore::new::<MyStruct>().unwrap();
-
-  let one = MyStruct {
-    foo: String::from("one"),
-  };
-
-  let two = MyStruct {
-    foo: String::from("two"),
-  };
-
-  let many = vec![one.clone(), one.clone(), two.clone()];
-  let id = store.insert_many(many).unwrap();
-  let updated = store.update_many(&one, &two).unwrap();
-  assert_eq!(updated, 2);
-  let result = store.find_many(&two).unwrap();
-  assert_eq!(result.len(), 3);
-  Ok(())
+  let file = File::open(".update_persist.db.ron").unwrap();
+  let buffered = BufReader::new(file);
+  let mut key = 0;
+  let mut arr_ids: Vec<Uuid> = vec![];
+  for line in buffered.lines() {
+    let byte_str = &line.unwrap().into_bytes();
+    let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+    match key {
+      0 => arr_ids.push(persisted.id),
+      1 => arr_ids.push(persisted.id),
+      4 => {
+        assert_eq!(persisted.data, updated);
+        assert_eq!(arr_ids.contains(&persisted.id), true);
+      }
+      5 => {
+        assert_eq!(persisted.data, updated);
+        assert_eq!(arr_ids.contains(&persisted.id), true);
+      }
+      _ => println!("Woops!"),
+    }
+    key += key;
+  }
+  fs::remove_file(".update_persist.db.ron").unwrap();
 }
