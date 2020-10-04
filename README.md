@@ -42,7 +42,7 @@ fn main() -> Result<()> {
 ```
 
 ## Why
-RedDb is the migration of a side project originally wrote in NodeJs that was designed to store objects in memory (with hd persistance) and do searchs on them.
+RedDb is the migration of a side project originally written in NodeJs that was designed to store objects in memory (with hd persistance) and do searchs on them.
 
 ## When 
 If you are looking for a some short of Key/Value  you will find better options. If you are looking for an embedded fast, lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice. 
