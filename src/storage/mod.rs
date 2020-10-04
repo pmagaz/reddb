@@ -13,7 +13,7 @@ pub trait Storage {
   fn new(db_name: &str) -> Result<Self>
   where
     Self: Sized;
-  fn load_content<T>(&self) -> Result<RedDbHM>
+  fn load<T>(&self) -> Result<RedDbHM>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq;
   fn persist<T>(&self, records: &[Document<T>]) -> Result<()>
