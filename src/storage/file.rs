@@ -155,8 +155,8 @@ where
         storage
             .write_all(&data)
             .context(RedDbErrorKind::FlushData)?;
-        let result = storage.sync_all().context(RedDbErrorKind::FlushData)?;
-        Ok(result)
+        storage.sync_all().context(RedDbErrorKind::FlushData)?;
+        Ok(())
     }
 
     fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
