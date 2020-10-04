@@ -39,7 +39,6 @@ fn main() -> Result<()> {
   let my_docs : Vec<Document<MyStruct>> = db.find(&my_struct)?;
   Ok(())
 }
-
 ```
 
 ## Why
