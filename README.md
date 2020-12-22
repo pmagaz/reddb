@@ -1,10 +1,10 @@
 # RedDb
 
-`RedDb` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data. 
+`RedDb` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data.
 
 ## Quickstart
 
-Add RedDb to your `Cargo.toml` specifing what serializer you want to use: 
+Add RedDb to your `Cargo.toml` specifing what serializer you want to use:
 
 ```toml
 [dependencies.RedDb]
@@ -14,9 +14,8 @@ features = ["ron_ser"] # Ron serialization / deserialization
 features = ["yaml_ser"] # Yaml serialization / deserialization
 ```
 
-
 ```rust
-use RedDb::{Document, RonDb,JsonStore,YamlStore};
+use reddb::{Document, RonDb,JsonStore,YamlStore};
 
 #[derive(Clone, Serialize, PartialEq, Deserialize)]
 struct MyStruct {
@@ -25,8 +24,7 @@ struct MyStruct {
 
 fn main() -> Result<()> {
   // RedDb with RON persistance for MyStruct documents
-  let db = RonDb::new::<MyStruct>()?;
-
+  let db = RonDb::new::<MyStruct>("my.db").unwrap();
   let my_struct = MyStruct {
     foo: String::from("hello")
   };
@@ -42,10 +40,12 @@ fn main() -> Result<()> {
 ```
 
 ## Why
+
 RedDb is the migration of a side project originally written in NodeJs that was designed to store objects in memory (with hd persistance) and do searchs on them.
 
-## When 
-If you are looking for a some short of Key/Value  you will find better options. If you are looking for an embedded fast, lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice. 
+## When
+
+If you are looking for a classic Key/Value storage you will find better options since RedDb is not a Key/Value storage per se. Even though you can store any kind of [data](#Data), RedDb was designed to store Structs and peform basic search operations in those Structs. Said that, if yo if you are looking for an embedded fast, lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice.
 
 ## API
 
@@ -55,7 +55,6 @@ If you are looking for a some short of Key/Value  you will find better options. 
 - [Finding data](#finding-data)
 - [Updating data](#updating-data)
 - [Deleting data](#deleting-data)
-
 
 ### Data
 
@@ -97,9 +96,9 @@ println!("{:?}", doc.uuid);
 // 94d69737-4b2e-4985-aaa1-e28bbff2e6d0
 ```
 
-#### Insert 
+#### Insert
 
-If you want to insert a vector of data `insert()` is more suitable and faster to persists than iterate over `insert_one()` method due to the nature of the AOF persistance. 
+If you want to insert a vector of data `insert()` is more suitable and faster to persists than iterate over `insert_one()` method due to the nature of the AOF persistance.
 
 ```rust
 let my_docs = vec![MyStruct {
@@ -114,7 +113,7 @@ let docs: Vec<Document<MyStruct>> = db.insert(my_docs)?;
 
 ### Finding Data
 
-There are two  ways to find your data. By it's uuid or looking into the database what data matches your query.
+There are two ways to find your data. By it's uuid or looking into the database what data matches your query.
 
 #### Find one
 
@@ -173,7 +172,7 @@ let inserted_doc : Document<MyStruct> = db.insert_one(my_struct)?;
 let updated: bool = db.update_one(&inserted_doc.uuid, new_value))?;
 ```
 
-#### Update 
+#### Update
 
 You can update all data in the databas that matches your query param. Update will return the number of updated documents.
 
@@ -204,7 +203,7 @@ let doc: Document<MyStruct> = db.insert_one(my_struct)?;
 let deleted : bool = db.delete_one(&doc.uuid))?;
 ```
 
-#### Delete 
+#### Delete
 
 Like in `update` method, this method will lookup into the database which data matches your query and then delete it.
 
@@ -223,12 +222,12 @@ println!("{:?}", updated);
 This library is licensed under either of
 
 - Apache License, Version 2.0
-	([LICENSE-APACHE](https://github.com/pmagaz/reddb/blob/master/LICENSE-APACHE)
-	or
-	[apache.org/licenses/LICENSE-2.0](https://apache.org/licenses/LICENSE-2.0))
+  ([LICENSE-APACHE](https://github.com/pmagaz/reddb/blob/master/LICENSE-APACHE)
+  or
+  [apache.org/licenses/LICENSE-2.0](https://apache.org/licenses/LICENSE-2.0))
 - MIT license
-	([LICENSE-MIT](https://github.com/pmagaz/reddb/blob/master/LICENSE-MIT)
-	or
-	[opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
+  ([LICENSE-MIT](https://github.com/pmagaz/reddb/blob/master/LICENSE-MIT)
+  or
+  [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
 
 at your option.
