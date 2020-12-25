@@ -1,8 +1,12 @@
+use async_trait::async_trait;
 use core::fmt::Debug;
 use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
+
+//use tokio::fs::{File, OpenOptions};
+
 use std::io::BufRead;
 use std::io::Read;
 
@@ -23,9 +27,10 @@ pub struct FileStorage<SE> {
     db_file: Mutex<File>,
 }
 
+#[async_trait]
 impl<SE> Storage for FileStorage<SE>
 where
-    for<'de> SE: Serializer<'de> + Debug,
+    for<'de> SE: Serializer<'de> + Debug + Sync + Send,
 {
     fn new(db_name: &str) -> Result<Self> {
         let serializer = SE::default();
@@ -72,8 +77,7 @@ where
             let id = document.id;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
-            // map.insert(id, Mutex::new(serialized));
-            map.entry(id).or_insert_with(|| Mutex::new(serialized));
+            map.entry(id).or_insert_with(|| serialized);
         }
 
         // self.compact_data::<T>(&map)
@@ -82,9 +86,9 @@ where
         Ok(map)
     }
 
-    fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
+    async fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
     where
-        for<'de> T: Serialize + Deserialize<'de> + Debug,
+        for<'de> T: Serialize + Deserialize<'de> + Debug + Sync,
     {
         let serialized: Vec<u8> = data
             .iter()
@@ -92,7 +96,9 @@ where
             .collect();
 
         self.append(&serialized)
+            .await
             .context(RedDbErrorKind::AppendData)?;
+
         Ok(())
     }
 }
@@ -118,7 +124,7 @@ where
     {
         let data: Vec<u8> = data
             .iter()
-            .map(|(id, data)| (id, data.lock().unwrap()))
+            //  .map(|(id, data)| (id, data))
             .map(|(id, data)| {
                 let data: T = self
                     .serializer
@@ -159,15 +165,19 @@ where
         Ok(())
     }
 
-    fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
+    async fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
         let mut storage = self.db_file.lock().unwrap();
+
         storage
             .seek(SeekFrom::End(0))
             .context(RedDbErrorKind::AppendData)?;
+
         storage
             .write_all(&data)
             .context(RedDbErrorKind::AppendData)?;
+
         storage.sync_all().context(RedDbErrorKind::AppendData)?;
+
         Ok(())
     }
 }
