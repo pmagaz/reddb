@@ -64,7 +64,7 @@ where
     .map_err(|_| RedDbErrorKind::ReadContent)?;
 
     Ok(Self {
-      storage: storage,
+      storage,
       data: Arc::new(RwLock::new(data)),
       serializer: SE::default(),
     })
