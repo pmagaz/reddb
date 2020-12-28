@@ -1,7 +1,5 @@
 /target
 /pkg
-/.cache
-/src2
 .cache
 wasm-pack.log
 *.db.*
