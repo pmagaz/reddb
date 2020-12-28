@@ -1,7 +1,5 @@
 use reddb::{Document, RonDb};
-use ron::ser;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::io::Error;
@@ -11,7 +9,7 @@ use uuid::Uuid;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-fn setup() -> Result<()> {
+async fn setup() -> Result<()> {
   if Path::new(".db.yaml").exists() {
     fs::remove_file(".db.yaml").unwrap();
   }
@@ -23,13 +21,14 @@ struct TestStruct {
   foo: String,
 }
 
-#[test]
-fn insert_one_and_persist<'a>() {
+#[tokio::test]
+async fn insert_one_and_persist<'a>() {
   let db = RonDb::new::<TestStruct>(".insert_one_persist.db").unwrap();
   let doc: Document<TestStruct> = db
     .insert_one(TestStruct {
       foo: "test".to_owned(),
     })
+    .await
     .unwrap();
 
   let file = File::open(".insert_one_persist.db.ron").unwrap();
@@ -42,8 +41,9 @@ fn insert_one_and_persist<'a>() {
   }
   fs::remove_file(".insert_one_persist.db.ron").unwrap();
 }
-#[test]
-fn insert_and_persist<'a>() {
+
+#[tokio::test]
+async fn insert_and_persist<'a>() {
   let db = RonDb::new::<TestStruct>(".insert_persist.db").unwrap();
   let one = TestStruct {
     foo: "one".to_owned(),
@@ -52,7 +52,7 @@ fn insert_and_persist<'a>() {
     foo: "two".to_owned(),
   };
   let arr_docs = vec![one.clone(), two.clone()];
-  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).unwrap();
+  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).await.unwrap();
   let file = File::open(".insert_persist.db.ron").unwrap();
   let buffered = BufReader::new(file);
   for line in buffered.lines() {
@@ -62,19 +62,21 @@ fn insert_and_persist<'a>() {
   }
   fs::remove_file(".insert_persist.db.ron").unwrap();
 }
-#[test]
-fn update_one_and_persist<'a>() {
+
+#[tokio::test]
+async fn update_one_and_persist<'a>() {
   let db = RonDb::new::<TestStruct>(".update_one_persist.db").unwrap();
   let doc: Document<TestStruct> = db
     .insert_one(TestStruct {
       foo: "test".to_owned(),
     })
+    .await
     .unwrap();
   let update = TestStruct {
     foo: "updated".to_owned(),
   };
-  db.update_one(&doc.id, update.clone()).unwrap();
-  let updated: Document<TestStruct> = db.find_one(&doc.id).unwrap();
+  db.update_one(&doc._id, update.clone()).await.unwrap();
+  let updated: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
   let file = File::open(".update_one_persist.db.ron").unwrap();
   let buffered = BufReader::new(file);
   let mut key = 1;
@@ -90,8 +92,9 @@ fn update_one_and_persist<'a>() {
   }
   fs::remove_file(".update_one_persist.db.ron").unwrap();
 }
-#[test]
-fn update_and_persist<'a>() {
+
+#[tokio::test]
+async fn update_and_persist<'a>() {
   let db = RonDb::new::<TestStruct>(".update_persist.db").unwrap();
   let one = TestStruct {
     foo: "search".to_owned(),
@@ -103,8 +106,8 @@ fn update_and_persist<'a>() {
     foo: "updated".to_owned(),
   };
   let arr_docs = vec![one.clone(), one.clone(), two.clone()];
-  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).unwrap();
-  let num_updated = db.update(&one, &updated).unwrap();
+  let inserted: Vec<Document<TestStruct>> = db.insert(arr_docs).await.unwrap();
+  let num_updated = db.update(&one, &updated).await.unwrap();
   assert_eq!(num_updated, 2);
 
   let file = File::open(".update_persist.db.ron").unwrap();
@@ -115,15 +118,15 @@ fn update_and_persist<'a>() {
     let byte_str = &line.unwrap().into_bytes();
     let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
     match key {
-      0 => arr_ids.push(persisted.id),
-      1 => arr_ids.push(persisted.id),
+      0 => arr_ids.push(persisted._id),
+      1 => arr_ids.push(persisted._id),
       4 => {
         assert_eq!(persisted.data, updated);
-        assert_eq!(arr_ids.contains(&persisted.id), true);
+        assert_eq!(arr_ids.contains(&persisted._id), true);
       }
       5 => {
         assert_eq!(persisted.data, updated);
-        assert_eq!(arr_ids.contains(&persisted.id), true);
+        assert_eq!(arr_ids.contains(&persisted._id), true);
       }
       _ => println!("Woops!"),
     }

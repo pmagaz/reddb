@@ -1,20 +1,21 @@
+use async_trait::async_trait;
 use core::fmt::Debug;
 use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::BufRead;
-use std::io::Read;
-
-use std::io::{Seek, SeekFrom, Write};
-use std::path::Path;
-use std::sync::Mutex;
+use std::time::Instant;
 
 use super::Storage;
 use crate::document::Document;
 use crate::error::{RedDbErrorKind, Result};
 use crate::serializer::{Serializer, Serializers};
+use crate::status::Status;
 use crate::RedDbHM;
+use std::path::Path;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, SeekFrom};
+
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -23,13 +24,15 @@ pub struct FileStorage<SE> {
     db_file: Mutex<File>,
 }
 
+#[async_trait]
 impl<SE> Storage for FileStorage<SE>
 where
-    for<'de> SE: Serializer<'de> + Debug,
+    for<'de> SE: Serializer<'de> + Debug + Sync + Send,
 {
-    fn new(db_name: &str) -> Result<Self> {
+    async fn new(db_name: &str) -> Result<Self> {
         let serializer = SE::default();
         let extension = match serializer.format() {
+            Serializers::Bin(st) => st,
             Serializers::Json(st) => st,
             Serializers::Yaml(st) => st,
             Serializers::Ron(st) => st,
@@ -46,53 +49,75 @@ where
                     .append(true)
                     .create(true)
                     .open(db_path)
+                    .await
                     .map_err(|_| RedDbErrorKind::StorageOpen)?,
             ),
         })
     }
 
-    fn load<T>(&self) -> Result<RedDbHM>
+    async fn load<T>(&self) -> Result<RedDbHM>
     where
-        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
         let mut map: RedDbHM = HashMap::new();
-        let mut buf = Vec::new();
-        self.read_data(&mut buf)
-            .context(RedDbErrorKind::ContentLoad)?;
+        let mut file = self.db_file.lock().await;
+        let reader = BufReader::new(&mut *file);
 
-        for (_index, content) in buf.lines().enumerate() {
-            let line = content.unwrap();
+        let mut lines = reader.lines();
+        let mut records = 0;
+        let start = Instant::now();
+
+        while let Some(line) = lines.next_line().await.unwrap() {
             let byte_str = &line.into_bytes();
             let document: Document<T> = self
                 .serializer
                 .deserialize(byte_str)
                 .context(RedDbErrorKind::DataCorruption)
                 .unwrap();
-
-            let id = document.id;
+            let id = document._id;
+            let st = document._st;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
-            // map.insert(id, Mutex::new(serialized));
-            map.entry(id).or_insert_with(|| Mutex::new(serialized));
+            records += 1;
+            if let Status::De = st {
+                map.remove(&id);
+            } else {
+                map.entry(id).or_insert_with(|| serialized);
+            }
         }
+        let duration = start.elapsed();
 
-        // self.compact_data::<T>(&map)
-        //     .context(RedDbErrorKind::Compact)?;
-        //println!("{:?}leches", map.len());
+        println!("[RedDb] {:?} records loaded ({:?})", &records, duration);
+        println!("[RedDb] Compacting data...");
+        let start = Instant::now();
+
+        self.compact_data::<T>(&map)
+            .await
+            .context(RedDbErrorKind::Compact)?;
+        let duration = start.elapsed();
+
+        println!(
+            "[RedDb] {:?} records compacted ({:?})",
+            &map.len(),
+            duration
+        );
+
         Ok(map)
     }
 
-    fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
+    async fn persist<T>(&self, data: &[Document<T>]) -> Result<()>
     where
-        for<'de> T: Serialize + Deserialize<'de> + Debug,
+        for<'de> T: Serialize + Deserialize<'de> + Debug + Sync,
     {
         let serialized: Vec<u8> = data
             .iter()
-            .flat_map(|document| self.serializer.serialize(document).unwrap())
+            .flat_map(|doc| self.serializer.serialize::<Document<T>>(doc).unwrap())
             .collect();
 
         self.append(&serialized)
+            .await
             .context(RedDbErrorKind::AppendData)?;
+
         Ok(())
     }
 }
@@ -101,43 +126,27 @@ impl<SE> FileStorage<SE>
 where
     for<'de> SE: Serializer<'de> + Debug,
 {
-    fn read_data(&self, mut buf: &mut Vec<u8>) -> Result<usize> {
-        let content = self
-            .db_file
-            .try_lock()
-            .unwrap()
-            .read_to_end(&mut buf)
-            .context(RedDbErrorKind::ReadContent)?;
-
-        Ok(content)
-    }
-
-    pub fn compact_data<T>(&self, data: &RedDbHM) -> Result<()>
+    pub async fn compact_data<T>(&self, data: &RedDbHM) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         let data: Vec<u8> = data
             .iter()
-            .map(|(id, data)| (id, data.lock().unwrap()))
-            .map(|(id, data)| {
+            .flat_map(|(id, data)| {
                 let data: T = self
                     .serializer
                     .deserialize(&*data)
                     .context(RedDbErrorKind::DataCorruption)
                     .unwrap();
-                Document::new(*id, data)
-            })
-            .flat_map(|document| {
+
                 self.serializer
-                    .serialize(&document)
+                    .serialize(&Document::new(*id, data, Status::In))
                     .context(RedDbErrorKind::DataCorruption)
                     .unwrap()
             })
             .collect();
 
-        if self.storage_exists() {
-            self.flush_data(&self.file_path, &data)?;
-        }
+        self.flush_data(&self.file_path, &data).await.unwrap();
 
         Ok(())
     }
@@ -146,28 +155,34 @@ where
         Path::new(&self.file_path).exists()
     }
 
-    fn flush_data<'a, P: AsRef<Path>>(&'a self, path: P, data: &[u8]) -> Result<()> {
-        let mut storage = File::create(path).context(RedDbErrorKind::DataCorruption)?;
-        storage.set_len(0).context(RedDbErrorKind::FlushData)?;
+    async fn flush_data<'a, P: AsRef<Path>>(&'a self, path: P, data: &[u8]) -> Result<()> {
+        let mut storage = File::create(path)
+            .await
+            .context(RedDbErrorKind::DataCorruption)?;
+        storage
+            .set_len(0)
+            .await
+            .context(RedDbErrorKind::FlushData)?;
         storage
             .seek(SeekFrom::Start(0))
+            .await
             .context(RedDbErrorKind::FlushData)?;
         storage
             .write_all(&data)
+            .await
             .context(RedDbErrorKind::FlushData)?;
-        storage.sync_all().context(RedDbErrorKind::FlushData)?;
+        storage
+            .sync_all()
+            .await
+            .context(RedDbErrorKind::FlushData)?;
         Ok(())
     }
 
-    fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
-        let mut storage = self.db_file.lock().unwrap();
-        storage
-            .seek(SeekFrom::End(0))
-            .context(RedDbErrorKind::AppendData)?;
-        storage
-            .write_all(&data)
-            .context(RedDbErrorKind::AppendData)?;
-        storage.sync_all().context(RedDbErrorKind::AppendData)?;
+    async fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
+        let mut storage = self.db_file.lock().await;
+        storage.seek(SeekFrom::End(0)).await.unwrap();
+        storage.write_all(&data).await.unwrap();
+        storage.sync_all().await.unwrap();
         Ok(())
     }
 }
@@ -184,32 +199,32 @@ mod tests {
         foo: String,
     }
 
-    #[test]
-    fn persist_and_load_data<'a>() {
-        let storage = FileStorage::<RonSerializer>::new("file_test").unwrap();
+    #[tokio::test]
+    async fn persist_and_load_data<'a>() {
+        let storage = FileStorage::<RonSerializer>::new("file_test")
+            .await
+            .unwrap();
         let doc_one = Document::new(
             Uuid::new_v4(),
             TestStruct {
                 foo: "one".to_owned(),
             },
+            Status::In,
         );
         let doc_two = Document::new(
             Uuid::new_v4(),
             TestStruct {
                 foo: "one".to_owned(),
             },
+            Status::In,
         );
         let arr_docs = vec![doc_one.clone(), doc_two.clone()];
-        let _persisted = storage.persist(&arr_docs);
-        // let map: RedDbHM = storage.load::<TestStruct>().unwrap();
-        // println!("{:?}", doc_one.id);
-        // println!("{:?}", doc_two.id);
-        // println!("{:?}eeee", map.len());
-        // map.get(&doc_one.id).unwrap();
-        // let one: TestStruct = storage
-        //     .serializer
-        //     .deserialize(&map.get(&doc_one.id).unwrap().lock().unwrap())
-        //     .unwrap();
-        // assert_eq!(one, doc_one.data);
+        let _persisted = storage.persist(&arr_docs).await.unwrap();
+        let map: RedDbHM = storage.load::<TestStruct>().await.unwrap();
+        let one: TestStruct = storage
+            .serializer
+            .deserialize(&map.get(&doc_one._id).unwrap())
+            .unwrap();
+        assert_eq!(one, doc_one.data);
     }
 }
