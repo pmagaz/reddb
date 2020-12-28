@@ -2,12 +2,12 @@
 name = "reddb"
 version = "0.2.0"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
-description = "Minimalistic in-memory embebed data base with persistance"
-keywords = ["store", "memory", "json", "ron", "yaml"]
-categories = ["database", "store", "persistance"]
-
+description = "Minimalistic in-memory embebed document data base with persistance"
+homepage = "https://github.com/pmagaz/reddb"
+repository = "https://github.com/pmagaz/reddb"
+keywords = ["store", "document", "memory", "database", "embedded", "json", "ron", "yaml"]
+categories = ["database", "store", "persistance", "embedded"]
 documentation = "https://docs.rs/RedDb"
-repository = "https://github.com/pmagaz/RedDb"
 edition = "2018"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
