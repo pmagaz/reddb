@@ -3,7 +3,7 @@ name: build
 on: [push, pull_request]
 
 jobs:
-  build_and_test:
+  cargo-cache:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -15,23 +15,73 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          profile: minimal
+          toolchain: nightly
+          components: rustfmt, clippy
 
-      - name: 🔨 Build
-        uses: actions-rs/cargo@v1
+  build:
+    name: Build
+    needs: [cargo-cache]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build: [stable, beta, nightly, tls, no-default-features, compression]
+        include:
+          - build: beta
+            rust: beta
+          - build: nightly
+            rust: nightly
+            benches: true
+          - build: tls
+            features: "--features tls"
+          - build: uds
+            features: "--features tokio/uds"
+          - build: no-default-features
+            features: "--no-default-features"
+          - build: compression
+            features: "--features compression"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
-          command: build
-
-      - name: 🔎 Test
+          toolchain: ${{ matrix.rust || 'stable' }}
+          profile: minimal
+          override: true
+      - name: Test
         uses: actions-rs/cargo@v1
         with:
           command: test
-
-      - name: ⚙ Integration test
+          args: ${{ matrix.features }}
+      - name: Test all benches
+        if: matrix.benches
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --features "integration_tests"
+          args: --benches ${{ matrix.features }}
+
+  doc:
+    name: Build docs
+    needs: [cargo-cache, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: cargo doc
+        uses: actions-rs/cargo@v1
+        with:
+          command: rustdoc
+          args: -- -D broken_intra_doc_links
+
+          
