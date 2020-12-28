@@ -151,11 +151,12 @@ where
         Ok(())
     }
 
+    /*
     fn storage_exists(&self) -> bool {
         Path::new(&self.file_path).exists()
-    }
+    }*/
 
-    async fn flush_data<'a, P: AsRef<Path>>(&'a self, path: P, data: &[u8]) -> Result<()> {
+    async fn flush_data<P: AsRef<Path>>(&self, path: P, data: &[u8]) -> Result<()> {
         let mut storage = File::create(path)
             .await
             .context(RedDbErrorKind::DataCorruption)?;
@@ -178,7 +179,7 @@ where
         Ok(())
     }
 
-    async fn append<'a>(&'a self, data: &[u8]) -> Result<()> {
+    async fn append(&self, data: &[u8]) -> Result<()> {
         let mut storage = self.db_file.lock().await;
         storage.seek(SeekFrom::End(0)).await.unwrap();
         storage.write_all(&data).await.unwrap();
