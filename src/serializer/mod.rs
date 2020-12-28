@@ -3,16 +3,19 @@ use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::result::Result;
 
+mod bin;
 mod json;
 mod ron;
 mod yaml;
 
 pub use self::ron::RonSerializer;
+pub use bin::BinSerializer;
 pub use json::JsonSerializer;
 pub use yaml::YamlSerializer;
 
 #[derive(Debug, Clone)]
 pub enum Serializers {
+  Bin(String),
   Json(String),
   Yaml(String),
   Ron(String),
