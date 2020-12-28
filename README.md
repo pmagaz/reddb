@@ -1,6 +1,6 @@
 # RedDb
 
-`RedDb` is an embedded fast, lightweight, and secure in-memory data store with [persistance](#persistance) in different serde-compatible formats (json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data.
+`RedDb` is an embedded fast, lightweight, secure and async in-memory data store with [persistance](#persistance) in different serde-compatible formats (bin, json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data.
 
 ## Quickstart
 
