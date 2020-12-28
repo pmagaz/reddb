@@ -22,7 +22,7 @@ jobs:
           components: rustfmt, clippy
 
   build:
-    name: Build
+    name: Test
     needs: [cargo-cache]
     runs-on: ubuntu-latest
     strategy:
