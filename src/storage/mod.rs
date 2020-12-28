@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::RedDbHM;
+use async_trait::async_trait;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::marker::Sized;
@@ -9,14 +10,15 @@ use crate::document::Document;
 
 pub use file::FileStorage;
 
+#[async_trait::async_trait]
 pub trait Storage {
-  fn new(db_name: &str) -> Result<Self>
+  async fn new(db_name: &str) -> Result<Self>
   where
     Self: Sized;
-  fn load<T>(&self) -> Result<RedDbHM>
+  async fn load<T>(&self) -> Result<RedDbHM>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq;
-  fn persist<T>(&self, records: &[Document<T>]) -> Result<()>
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync;
+  async fn persist<T>(&self, records: &[Document<T>]) -> Result<()>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug;
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Send + Sync;
 }
