@@ -1,26 +1,34 @@
 use failure::ResultExt;
 use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
-
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
-use uuid::Uuid;
-mod document;
-mod error;
-mod serializer;
-mod storage;
+use std::sync::Arc;
 
 pub use document::Document;
 use error::{RedDbErrorKind, Result};
-pub use serializer::{JsonSerializer, RonSerializer, Serializer, YamlSerializer};
+//use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use serde::{Deserialize, Serialize};
+pub use serializer::{BinSerializer, JsonSerializer, RonSerializer, Serializer, YamlSerializer};
+use status::Status;
 use std::collections::HashMap;
-
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use storage::FileStorage;
+use std::fmt::Debug;
+use std::thread;
+pub use std::time::Instant;
+pub use storage::FileStorage;
 use storage::Storage;
+use tokio::runtime::Runtime;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use uuid::Uuid;
+
+mod document;
+mod error;
+mod serializer;
+mod status;
+mod storage;
 
 pub type RedDbHM = HashMap<Uuid, Vec<u8>>;
 
+//#[cfg(feature = "bin_ser")]
+pub type BinDb = RedDb<BinSerializer, FileStorage<BinSerializer>>;
 //#[cfg(feature = "json_ser")]
 pub type JsonDb = RedDb<JsonSerializer, FileStorage<JsonSerializer>>;
 //#[cfg(feature = "yaml_ser")]
@@ -32,55 +40,51 @@ pub type RonDb = RedDb<RonSerializer, FileStorage<RonSerializer>>;
 pub struct RedDb<SE, ST> {
   storage: ST,
   serializer: SE,
-  data: RwLock<RedDbHM>,
+  data: Arc<RwLock<RedDbHM>>,
 }
 
-impl<'a, SE, ST> RedDb<SE, ST>
+impl<'a, SE, ST: 'static> RedDb<SE, ST>
 where
   for<'de> SE: Serializer<'de> + Debug,
-  for<'de> ST: Storage + Debug,
+  for<'de> ST: Storage + Debug + Send + Sync,
 {
-  pub fn new<T>(db_name: &str) -> Result<Self>
+  pub fn new<T>(db_name: &'static str) -> Result<Self>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
   {
-    let storage = ST::new(db_name)?;
-    let data: RedDbHM = storage.load::<T>().context(RedDbErrorKind::ContentLoad)?;
+    println!("[RedDb] Loading data...");
+
+    let mut rt = Runtime::new().unwrap();
+    let (data, storage) = thread::spawn(move || {
+      let storage = rt.block_on(async { ST::new(db_name).await.unwrap() });
+      let data = rt.block_on(async { storage.load::<T>().await.unwrap() });
+      (data, storage)
+    })
+    .join()
+    .map_err(|_| RedDbErrorKind::ReadContent)?;
 
     Ok(Self {
-      storage,
-      data: RwLock::new(data),
+      storage: storage,
+      data: Arc::new(RwLock::new(data)),
       serializer: SE::default(),
     })
   }
 
   async fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
-    let lock = self.data.read().map_err(|_| RedDbErrorKind::Poisoned)?;
+    let lock = self.data.read().await;
     Ok(lock)
   }
 
   async fn write(&'a self) -> Result<RwLockWriteGuard<'a, RedDbHM>> {
-    let lock = self.data.write().map_err(|_| RedDbErrorKind::Poisoned)?;
+    let lock = self.data.write().await;
     Ok(lock)
   }
 
-  fn create_doc<T>(&self, id: &Uuid, value: T) -> Document<T>
+  fn create_doc<T>(&self, id: &Uuid, value: T, status: Status) -> Document<T>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    Document::new(*id, value)
-  }
-
-  async fn insert_document<T>(&self, value: T) -> Result<Document<T>>
-  where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
-  {
-    let mut data = self.write().await?;
-    let id = Uuid::new_v4();
-    let serialized = self.serialize(&value)?;
-    data.insert(id, serialized);
-    let result = self.create_doc(&id, value);
-    Ok(result)
+    Document::new(*id, value, status)
   }
 
   async fn find_ids<T>(&self, search: &T) -> Result<Vec<Uuid>>
@@ -97,7 +101,6 @@ where
 
     let docs: Vec<Uuid> = data
       .iter()
-      .map(|(id, value)| (id, value))
       .filter(|(_id, value)| **value == serialized)
       .map(|(id, _value)| *id)
       .collect();
@@ -105,24 +108,63 @@ where
     Ok(docs)
   }
 
+  async fn insert_document<T>(&self, value: T) -> Result<Document<T>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+  {
+    let mut data = self.write().await?;
+    let id = Uuid::new_v4();
+    let serialized = self.serialize(&value)?;
+    data.insert(id, serialized);
+    let result = self.create_doc(&id, value, Status::default());
+
+    Ok(result)
+  }
+
   pub async fn insert_one<T>(&self, value: T) -> Result<Document<T>>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Sync,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
   {
+    let start = Instant::now();
     let doc = self.insert_document(value).await?;
     self
       .storage
       .persist(&[doc.to_owned()])
       .await
       .context(RedDbErrorKind::Datapersist)?;
-
+    let duration = start.elapsed();
+    println!("[RedDb] insert_one {:?} records in ({:?})", 1, duration);
     Ok(doc)
+  }
+
+  pub async fn insert<T>(&self, values: Vec<T>) -> Result<Vec<Document<T>>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
+  {
+    let start = Instant::now();
+
+    let docs: Vec<Document<T>> = stream::iter(values)
+      .then(|data| self.insert_document(data))
+      .try_collect()
+      .await?;
+
+    self
+      .storage
+      .persist(&docs)
+      .await
+      .context(RedDbErrorKind::Datapersist)?;
+    let duration = start.elapsed();
+    println!("[RedDb] insert {:?} records ({:?})", docs.len(), duration);
+
+    Ok(docs)
   }
 
   pub async fn find_one<T>(&self, id: &Uuid) -> Result<Document<T>>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
+    let start = Instant::now();
+
     let data = self
       .read()
       .await
@@ -133,14 +175,18 @@ where
       .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
 
     let data = self.deserialize(&*data)?;
-    let doc = self.create_doc(id, data);
+    let doc = self.create_doc(id, data, Status::In);
+    let duration = start.elapsed();
+    println!("[RedDb] find_one executed in ({:?})", duration);
     Ok(doc)
   }
 
   pub async fn update_one<T>(&'a self, id: &Uuid, new_value: T) -> Result<bool>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Sync,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
   {
+    let start = Instant::now();
+
     let mut data = self
       .write()
       .await
@@ -152,35 +198,57 @@ where
         .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
 
       *data = self.serialize(&new_value)?;
-      let doc = self.create_doc(id, new_value);
+      let doc = self.create_doc(id, new_value, Status::Up);
+
       self
         .storage
         .persist(&[doc])
         .await
         .context(RedDbErrorKind::Datapersist)?;
+      let duration = start.elapsed();
+      println!("[RedDb] update_one executed in ({:?})", duration);
       Ok(true)
     } else {
       Ok(false)
     }
   }
 
-  pub fn delete_one(&self, id: &Uuid) -> Result<bool> {
-    let mut data = self.data.write().unwrap();
-    if data.contains_key(id) {
-      data.remove(id).unwrap();
-      Ok(true)
-    } else {
-      Ok(false)
-    }
+  pub async fn remove_document<T>(&self, id: Uuid) -> Result<Document<T>>
+  where
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
+  {
+    let mut data = self.write().await?;
+    let value = data.remove(&id).unwrap();
+    let data = self.deserialize(&value)?;
+    let doc = self.create_doc(&id, data, Status::De);
+    Ok(doc)
   }
-  pub async fn insert<T>(&self, values: Vec<T>) -> Result<Vec<Document<T>>>
+
+  // pub async fn delete_one(&self, id: &Uuid) -> Result<bool> {
+  //   let result = self.remove_document(*id).await?;
+  //   Ok(result)
+  // }
+
+  pub async fn find_all<T>(&self) -> Result<Vec<Document<T>>>
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
-    let docs: Vec<Document<T>> = stream::iter(values)
-      .then(|data| self.insert_document(data))
-      .try_collect()
-      .await?;
+    let start = Instant::now();
+
+    let data = self
+      .read()
+      .await
+      .map_err(|_| RedDbErrorKind::PoisonedValue)?;
+
+    let docs: Vec<Document<T>> = data
+      .iter()
+      .map(|(id, data)| {
+        let data = self.deserialize(&*data).unwrap();
+        self.create_doc(id, data, Status::In)
+      })
+      .collect();
+    let duration = start.elapsed();
+    println!("[RedDb] find_all {:?} records ({:?})", docs.len(), duration);
 
     Ok(docs)
   }
@@ -189,6 +257,8 @@ where
   where
     for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
   {
+    let start = Instant::now();
+
     let data = self
       .read()
       .await
@@ -198,20 +268,25 @@ where
 
     let docs: Vec<Document<T>> = data
       .iter()
-      .map(|(id, data)| (id, data))
       .filter(|(_id, data)| **data == serialized)
       .map(|(id, data)| {
         let data = self.deserialize(&*data).unwrap();
-        self.create_doc(id, data)
+        self.create_doc(id, data, Status::In)
       })
       .collect();
+
+    let duration = start.elapsed();
+    println!("[RedDb] find {:?} records ({:?})", docs.len(), duration);
+
     Ok(docs)
   }
 
   pub async fn update<T>(&self, search: &T, new_value: &T) -> Result<usize>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq + Sync,
+    for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq + Send + Sync,
   {
+    let start = Instant::now();
+
     let mut data = self
       .write()
       .await
@@ -225,29 +300,45 @@ where
       .filter(|(_id, data)| **data == query)
       .map(|(id, data)| {
         *data = self.serialize(new_value).unwrap();
-        self.create_doc(id, new_value.to_owned())
+        self.create_doc(id, new_value.to_owned(), Status::Up)
       })
       .collect();
 
     let result = docs.len();
+
     self
       .storage
       .persist(&docs)
       .await
       .context(RedDbErrorKind::Datapersist)?;
 
+    let duration = start.elapsed();
+    println!("[RedDb] update {:?} records ({:?})", docs.len(), duration);
+
     Ok(result)
   }
 
   pub async fn delete<T>(&self, search: &T) -> Result<usize>
   where
-    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
   {
+    let start = Instant::now();
+
     let ids = self.find_ids(search).await?;
-    let docs: Vec<bool> = ids
-      .iter()
-      .map(|id| (self.delete_one(id).unwrap()))
-      .collect();
+
+    let docs: Vec<Document<T>> = stream::iter(ids)
+      .then(|id| self.remove_document(id))
+      .try_collect()
+      .await?;
+
+    self
+      .storage
+      .persist(&docs)
+      .await
+      .context(RedDbErrorKind::Datapersist)?;
+
+    let duration = start.elapsed();
+    println!("[RedDb] delete {:?} records ({:?})", docs.len(), duration);
     Ok(docs.len())
   }
 
@@ -294,7 +385,7 @@ mod tests {
       foo: "test".to_owned(),
     };
     let doc: Document<TestStruct> = db.insert_document(data).await.unwrap();
-    let find: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
+    let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
     assert_eq!(find.data, doc.data);
   }
   #[tokio::test]
@@ -327,9 +418,9 @@ mod tests {
       .await
       .unwrap();
 
-    assert_eq!(ids.contains(&doc.id), true);
-    assert_eq!(ids.contains(&doc2.id), false);
-    assert_eq!(ids.contains(&doc3.id), true);
+    assert_eq!(ids.contains(&doc._id), true);
+    assert_eq!(ids.contains(&doc2._id), false);
+    assert_eq!(ids.contains(&doc3._id), true);
 
     fs::remove_file(".test.db.ron").unwrap();
   }
@@ -343,8 +434,8 @@ mod tests {
       .await
       .unwrap();
 
-    let find: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
-    assert_eq!(find.id, doc.id);
+    let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
+    assert_eq!(find._id, doc._id);
     assert_eq!(find.data, doc.data);
 
     fs::remove_file(".insert_and_find_one.db.ron").unwrap();
@@ -379,8 +470,8 @@ mod tests {
     };
 
     let doc = db.insert_one(original.clone()).await.unwrap();
-    db.update_one(&doc.id, updated.clone()).await.unwrap();
-    let result: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
+    db.update_one(&doc._id, updated.clone()).await.unwrap();
+    let result: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
     assert_eq!(result.data, updated);
     fs::remove_file(".update_one.db.ron").unwrap();
   }
@@ -411,13 +502,13 @@ mod tests {
       foo: "test".to_owned(),
     };
 
-    let doc = db.insert_one(search.clone()).await.unwrap();
-    let deleted = db.delete_one(&doc.id).unwrap();
-    assert_eq!(deleted, true);
+    // let doc = db.insert_one(search.clone()).await.unwrap();
+    // let deleted = db.delete_one(&doc.id).await.unwrap();
+    // assert_eq!(deleted, true);
 
-    let not_deleted = db.delete_one(&doc.id).unwrap();
-    assert_eq!(not_deleted, false);
-    fs::remove_file(".delete_one.db.ron").unwrap();
+    // let not_deleted = db.delete_one(&doc.id).await.unwrap();
+    // assert_eq!(not_deleted, false);
+    // fs::remove_file(".delete_one.db.ron").unwrap();
   }
 
   async fn delete() {
@@ -439,9 +530,9 @@ mod tests {
     assert_eq!(not_deleted, 0);
     fs::remove_file(".delete.db.ron").unwrap();
   }
-  #[test]
-  fn serialie_deserialize() {
-    let db = RonDb::new::<TestStruct>(".test.db").unwrap();
+  #[tokio::test]
+  async fn serialie_deserialize() {
+    let db = RonDb::new::<TestStruct>(".serialize.db").unwrap();
     let test = TestStruct {
       foo: "one".to_owned(),
     };
@@ -450,6 +541,6 @@ mod tests {
     assert_eq!(serialized, byte_str);
     let deserialized: TestStruct = db.serializer.deserialize(&byte_str).unwrap();
     assert_eq!(deserialized, test);
-    fs::remove_file(".test.db.ron").unwrap();
+    fs::remove_file(".serialize.db.ron").unwrap();
   }
 }
