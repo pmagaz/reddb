@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::RedDbHM;
-use async_trait::async_trait;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::marker::Sized;

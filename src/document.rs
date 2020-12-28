@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 use crate::status::Status;
-use std::borrow::Cow;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
