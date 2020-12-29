@@ -192,8 +192,8 @@ where
 mod tests {
     use super::*;
     //use crate::serializer::RonSerializer;
-    use crate::Document;
-    use crate::Uuid;
+    //use crate::Document;
+    //use crate::Uuid;
 
     #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
     struct TestStruct {
