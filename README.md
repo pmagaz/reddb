@@ -11,6 +11,7 @@ Add RedDb to your `Cargo.toml` specifing what serializer you want to use:
 ```toml
 [dependencies.RedDb]
 version = "0.2.0"
+features = ["bin_ser"] # Binary serialization / deserialization
 features = ["json_ser"] # Json serialization / deserialization
 features = ["ron_ser"] # Ron serialization / deserialization
 features = ["yaml_ser"] # Yaml serialization / deserialization
@@ -25,7 +26,7 @@ struct MyStruct {
 }
 
 fn main() -> Result<()> {
-  // RedDb with RON persistance for MyStruct documents
+  // RedDb with RON persistance for MyStruct structs
   let db = RonDb::new::<MyStruct>("my.db").unwrap();
   let my_struct = MyStruct {
     foo: String::from("hello")
@@ -73,7 +74,7 @@ Since data field is a generic you can store any kind of data you want. As you wi
 
 ### Persistance
 
-RedDb's persistence uses an append-only format (AOF) so all write operations are added to to the end of the database file. The database is automatically compacted in just one line per object/record everytime you start the database in your application.
+RedDb's persistence uses an append-only format (AOF) so all write operations (Insert, Update, Delete) are added to to the end of the database file. The database is automatically compacted in just one line per object/record everytime you start the database in your application.
 
 The API provides bulk-like write operations (insert & update) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
 
