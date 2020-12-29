@@ -6,21 +6,21 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Document<T> {
-  pub _id: Uuid,
-  //#[serde(flatten)]
-  pub data: T,
-  pub _st: Status,
+    pub _id: Uuid,
+    //#[serde(flatten)]
+    pub data: T,
+    pub _st: Status,
 }
 
 impl<'a, T> Document<T>
 where
-  T: Serialize + Deserialize<'a> + Debug,
+    T: Serialize + Deserialize<'a> + Debug,
 {
-  pub fn new(id: Uuid, data: T, st: Status) -> Self {
-    Self {
-      _id: id,
-      data,
-      _st: st,
+    pub fn new(id: Uuid, data: T, st: Status) -> Self {
+        Self {
+            _id: id,
+            data,
+            _st: st,
+        }
     }
-  }
 }
