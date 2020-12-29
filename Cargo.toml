@@ -56,4 +56,6 @@ tokio-test = "0.4.0"
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default
-features = ["prepush-hook", "run-cargo-fmt", "run-cargo-clippy"]
+features = ["precommit-hook", "run-cargo-fmt"]
+features = ["prepush-hook", "run-cargo-test", "run-cargo-clippy"]
+
