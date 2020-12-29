@@ -4,8 +4,6 @@
 wasm-pack.log
 *.db.*
 **/*.rs.bk
-*.lock
 *.ron
 *.yaml
 *.json
-Cargo.lock
