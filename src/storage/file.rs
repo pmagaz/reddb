@@ -191,8 +191,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    //use crate::serializer::RonSerializer;
     use crate::Document;
-    use crate::RonSerializer;
     use crate::Uuid;
 
     #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]

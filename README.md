@@ -18,7 +18,7 @@ features = ["yaml_ser"] # Yaml serialization / deserialization
 ```
 
 ```rust
-use reddb::{Document, RonDb,JsonStore,YamlStore};
+use reddb::{Document, RonDb};
 
 #[derive(Clone, Serialize, PartialEq, Deserialize)]
 struct MyStruct {
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
   };
 
   // Insert data
-  let doc: Document<MyStruct> = db.insert_one(my_struct).await?;
+  let doc = db.insert_one(my_struct).await?;
   // Find by uuid
   let my_doc: Document<MyStruct> = db.find_one(&doc.uuid).await?;
   // Find all records equal to my_struct
@@ -78,7 +78,7 @@ Since data field is a generic you can store any kind of data you want. As you wi
 
 RedDb's persistence uses an append-only format (AOF) so all write operations (Insert, Update, Delete) are added to to the end of the database file. The database is automatically compacted in just one line per object/record everytime you start the database in your application.
 
-The API provides bulk-like write operations (insert & update) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
+The API provides bulk-like write operations (insert, update and delete) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
 
 ### Inserting Data
 
@@ -129,7 +129,7 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let inserted_doc : Document<TestStruct> = db.insert_one(my_struct).await?;
+let inserted_doc = db.insert_one(my_struct).await?;
 let doc: Document<MyStruct> = db.find_one(&inserted_doc.uuid).await?;
 ```
 
@@ -173,7 +173,7 @@ let new_value = MyStruct {
   foo: String::from("bye"),
 };
 
-let inserted_doc : Document<MyStruct> = db.insert_one(my_struct).await?;
+let inserted_doc = db.insert_one(my_struct).await?;
 let updated: bool = db.update_one(&inserted_doc.uuid, new_value)).await?;
 ```
 
@@ -204,7 +204,7 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let doc: Document<MyStruct> = db.insert_one(my_struct).await?;
+let doc = db.insert_one(my_struct).await?;
 let deleted : bool = db.delete_one(&doc.uuid)).await?;
 ```
 

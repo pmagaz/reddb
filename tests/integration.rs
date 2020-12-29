@@ -1,4 +1,4 @@
-use reddb::{Document, RonDb};
+use reddb::{Document, FileStorage, RonDb};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
