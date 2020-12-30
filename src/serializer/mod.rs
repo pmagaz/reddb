@@ -12,7 +12,7 @@ mod yaml;
 pub use self::bin::Bin;
 #[cfg(feature = "json_ser")]
 pub use self::json::Json;
-//#[cfg(feature = "ron_ser")]
+#[cfg(feature = "ron_ser")]
 pub use self::ron::Ron;
 #[cfg(feature = "yaml_ser")]
 pub use self::yaml::Yaml;

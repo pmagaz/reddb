@@ -32,7 +32,7 @@ pub type BinDb = RedDb<serializer::Bin, FileStorage<serializer::Bin>>;
 pub type JsonDb = RedDb<serializer::Json, FileStorage<serializer::Json>>;
 #[cfg(feature = "yaml_ser")]
 pub type YamlDb = RedDb<serializer::Yaml, FileStorage<serializer::Yaml>>;
-//#[cfg(feature = "ron_ser")]
+#[cfg(feature = "ron_ser")]
 pub type RonDb = RedDb<serializer::Ron, FileStorage<serializer::Ron>>;
 
 #[derive(Debug)]
