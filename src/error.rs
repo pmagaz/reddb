@@ -18,8 +18,10 @@ pub enum RedDbErrorKind {
     #[fail(display = "Could not flush data")]
     AppendData,
     #[fail(display = "Could not append data ")]
-    StorageOpen,
-    #[fail(display = "Could not read storageeee")]
+    StorageInit,
+    #[fail(display = "Could not init storage")]
+    StorageData,
+    #[fail(display = "Could not read storage data")]
     ReadContent,
     #[fail(display = "Could not load storage content")]
     ContentLoad,

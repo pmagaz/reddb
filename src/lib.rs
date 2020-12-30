@@ -1,40 +1,39 @@
 use failure::ResultExt;
 use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
-use std::sync::Arc;
-
-pub use document::Document;
-use error::{RedDbErrorKind, Result};
-//use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use serde::{Deserialize, Serialize};
-pub use serializer::{BinSerializer, JsonSerializer, RonSerializer, Serializer, YamlSerializer};
-use status::Status;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::thread;
-pub use std::time::Instant;
-pub use storage::FileStorage;
-use storage::Storage;
+use std::time::Instant;
 use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use uuid::Uuid;
 
 mod document;
 mod error;
-mod serializer;
+pub mod serializer;
 mod status;
 mod storage;
 
-pub type RedDbHM = HashMap<Uuid, Vec<u8>>;
+pub use document::Document;
+use error::{RedDbErrorKind, Result};
+use serde::{Deserialize, Serialize};
+use serializer::Serializer;
+use status::Status;
+pub use storage::FileStorage;
+use storage::Storage;
 
-//#[cfg(feature = "bin_ser")]
-pub type BinDb = RedDb<BinSerializer, FileStorage<BinSerializer>>;
-//#[cfg(feature = "json_ser")]
-pub type JsonDb = RedDb<JsonSerializer, FileStorage<JsonSerializer>>;
-//#[cfg(feature = "yaml_ser")]
-pub type YamlDb = RedDb<YamlSerializer, FileStorage<YamlSerializer>>;
+type RedDbHM = HashMap<Uuid, Vec<u8>>;
+
+#[cfg(feature = "bin_ser")]
+pub type BinDb = RedDb<serializer::Bin, FileStorage<serializer::Bin>>;
+#[cfg(feature = "json_ser")]
+pub type JsonDb = RedDb<serializer::Json, FileStorage<serializer::Json>>;
+#[cfg(feature = "yaml_ser")]
+pub type YamlDb = RedDb<serializer::Yaml, FileStorage<serializer::Yaml>>;
 //#[cfg(feature = "ron_ser")]
-pub type RonDb = RedDb<RonSerializer, FileStorage<RonSerializer>>;
+pub type RonDb = RedDb<serializer::Ron, FileStorage<serializer::Ron>>;
 
 #[derive(Debug)]
 pub struct RedDb<SE, ST> {
@@ -61,7 +60,7 @@ where
             (data, storage)
         })
         .join()
-        .map_err(|_| RedDbErrorKind::ReadContent)?;
+        .map_err(|_| RedDbErrorKind::Datapersist)?;
 
         Ok(Self {
             storage,
@@ -202,6 +201,7 @@ where
                 .persist(&[doc])
                 .await
                 .context(RedDbErrorKind::Datapersist)?;
+
             let duration = start.elapsed();
             println!("[RedDb] update_one executed in ({:?})", duration);
             Ok(true)
@@ -221,10 +221,13 @@ where
         Ok(doc)
     }
 
-    // pub async fn delete_one(&self, id: &Uuid) -> Result<bool> {
-    //   let result = self.remove_document(*id).await?;
-    //   Ok(result)
-    // }
+    pub async fn delete_one<T>(&self, id: &Uuid) -> Result<Document<T>>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
+    {
+        let result = self.remove_document(*id).await?;
+        Ok(result)
+    }
 
     pub async fn find_all<T>(&self) -> Result<Vec<Document<T>>>
     where
@@ -293,7 +296,6 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter_mut()
-            .map(|(id, data)| (id, data))
             .filter(|(_id, data)| **data == query)
             .map(|(id, data)| {
                 *data = self.serialize(new_value).unwrap();
@@ -359,8 +361,10 @@ where
 }
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "ron_ser"), ignore)]
 mod tests {
     use super::*;
+    use crate::RonDb;
     use std::fs;
 
     #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
@@ -493,13 +497,17 @@ mod tests {
             foo: "test".to_owned(),
         };
 
-        // let doc = db.insert_one(search.clone()).await.unwrap();
-        // let deleted = db.delete_one(&doc.id).await.unwrap();
-        // assert_eq!(deleted, true);
-
-        // let not_deleted = db.delete_one(&doc.id).await.unwrap();
-        // assert_eq!(not_deleted, false);
-        // fs::remove_file(".delete_one.db.ron").unwrap();
+        let doc = db.insert_one(search.clone()).await.unwrap();
+        let deleted = db.delete_one(&doc._id).await.unwrap();
+        assert_eq!(
+            deleted,
+            Document {
+                _id: doc._id,
+                data: doc.data,
+                _st: Status::De
+            }
+        );
+        fs::remove_file(".delete_one.db.ron").unwrap();
     }
 
     async fn delete() {
