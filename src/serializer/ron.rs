@@ -16,7 +16,7 @@ impl Default for Ron {
     }
 }
 
-//#[cfg(feature = "ron_ser")]
+#[cfg(feature = "ron_ser")]
 impl<'a> Serializer<'a> for Ron {
     fn format(&self) -> &Serializers {
         &self.format
