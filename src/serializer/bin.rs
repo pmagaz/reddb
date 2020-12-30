@@ -1,10 +1,7 @@
-use bincode::{deserialize_from, serialize};
-use failure::Error;
-use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
 
-use super::{Serializer, Serializers};
+use super::*;
 
 #[derive(Debug)]
 pub struct Bin {
@@ -19,9 +16,7 @@ impl Default for Bin {
     }
 }
 
-pub type BinSerializer = Bin;
-
-//#[cfg(feature = "bin_ser")]
+#[cfg(feature = "bin_ser")]
 impl<'a> Serializer<'a> for Bin {
     fn format(&self) -> &Serializers {
         &self.format
@@ -29,17 +24,17 @@ impl<'a> Serializer<'a> for Bin {
 
     fn serialize<T>(&self, data: &T) -> Result<Vec<u8>, Error>
     where
-        for<'de> T: Serialize + Deserialize<'de>,
+        for<'de> T: serde::Serialize + serde::Deserialize<'de>,
     {
-        let mut vec = serialize(data)?;
+        let mut vec = bincode::serialize(data)?;
         vec.extend(b"\n");
         Ok(vec)
     }
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
     where
-        for<'de> T: Serialize + Deserialize<'de>,
+        for<'de> T: serde::Serialize + serde::Deserialize<'de>,
     {
-        let vec = deserialize_from(data)?;
+        let vec = bincode::deserialize_from(data)?;
         Ok(vec)
     }
 }
