@@ -11,7 +11,6 @@ Add RedDb to your `Cargo.toml` specifing what serializer you want to use:
 ```toml
 [dependencies.RedDb]
 version = "0.2.1"
-features = ["json_ser"] # Json serialization / deserialization
 features = ["ron_ser"] # Ron serialization / deserialization
 features = ["json_ser"] # Json serialization / deserialization
 
