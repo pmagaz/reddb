@@ -1,4 +1,4 @@
-use reddb::{Document, RonDb};
+use reddb::{Document, FileStorage, RonDb};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
@@ -36,7 +36,7 @@ async fn insert_one_and_persist<'a>() {
 
     for line in buffered.lines() {
         let byte_str = &line.unwrap().into_bytes();
-        let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+        let persisted: Document<TestStruct> = ::ron::de::from_bytes(byte_str).unwrap();
         assert_eq!(doc, persisted);
     }
     fs::remove_file(".insert_one_persist.db.ron").unwrap();
@@ -57,7 +57,7 @@ async fn insert_and_persist<'a>() {
     let buffered = BufReader::new(file);
     for line in buffered.lines() {
         let byte_str = &line.unwrap().into_bytes();
-        let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+        let persisted: Document<TestStruct> = ::ron::de::from_bytes(byte_str).unwrap();
         assert_eq!(inserted.contains(&persisted), true);
     }
     fs::remove_file(".insert_persist.db.ron").unwrap();
@@ -82,7 +82,7 @@ async fn update_one_and_persist<'a>() {
     let mut key = 1;
     for line in buffered.lines() {
         let byte_str = &line.unwrap().into_bytes();
-        let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+        let persisted: Document<TestStruct> = ::ron::de::from_bytes(byte_str).unwrap();
         match key {
             1 => assert_eq!(doc, persisted),
             // 2 => assert_eq!(persisted, updated),
@@ -116,7 +116,7 @@ async fn update_and_persist<'a>() {
     let mut arr_ids: Vec<Uuid> = vec![];
     for line in buffered.lines() {
         let byte_str = &line.unwrap().into_bytes();
-        let persisted: Document<TestStruct> = ron::de::from_bytes(byte_str).unwrap();
+        let persisted: Document<TestStruct> = ::ron::de::from_bytes(byte_str).unwrap();
         match key {
             0 => arr_ids.push(persisted._id),
             1 => arr_ids.push(persisted._id),

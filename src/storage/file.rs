@@ -50,7 +50,8 @@ where
                     .create(true)
                     .open(db_path)
                     .await
-                    .map_err(|_| RedDbErrorKind::StorageOpen)?,
+                    .map_err(|_| RedDbErrorKind::StorageInit)
+                    .unwrap(),
             ),
         })
     }
@@ -191,9 +192,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Document;
-    use crate::RonSerializer;
-    use crate::Uuid;
+    //use crate::serializer::RonSerializer;
+    //use crate::Document;
+    //use crate::Uuid;
 
     #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
     struct TestStruct {
