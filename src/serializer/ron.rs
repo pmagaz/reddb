@@ -1,10 +1,7 @@
-use failure::{Error, ResultExt};
-use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fmt::Debug;
 
-use super::{Serializer, Serializers};
-use crate::error::RedDbErrorKind;
+use super::*;
 
 #[derive(Debug)]
 pub struct Ron {
@@ -19,9 +16,7 @@ impl Default for Ron {
     }
 }
 
-pub type RonSerializer = Ron;
-
-//#[cfg(feature = "ron_ser")]
+#[cfg(feature = "ron_ser")]
 impl<'a> Serializer<'a> for Ron {
     fn format(&self) -> &Serializers {
         &self.format
@@ -31,9 +26,7 @@ impl<'a> Serializer<'a> for Ron {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        let mut vec = ron::ser::to_string(data)
-            .context(RedDbErrorKind::Serialization)?
-            .into_bytes();
+        let mut vec = ::ron::ser::to_string(data)?.into_bytes();
         vec.extend(b"\n");
         Ok(vec)
     }
@@ -41,6 +34,6 @@ impl<'a> Serializer<'a> for Ron {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        Ok(ron::de::from_bytes::<T>(data)?)
+        Ok(::ron::de::from_reader(data)?)
     }
 }

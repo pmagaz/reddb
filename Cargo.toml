@@ -1,6 +1,6 @@
 [package]
 name = "reddb"
-version = "0.3.0"
+version = "0.2.1"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
 description = "Minimalistic in-memory embedded document data base with persistance"
 homepage = "https://github.com/pmagaz/reddb"
@@ -17,35 +17,44 @@ exclude =  ["tests", ".github", ".gitignore", "examples"]
 name = "reddb"
 path = "src/lib.rs"
 
+
 [dependencies]
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
 failure = "0.1.8"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "0.2", features = ["macros","fs","stream","sync"] }
 serde = { version = "1.0", features = ["derive"] }
 futures = "0.3.8"
 async-trait = "0.1.42"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies.serde_json]
-optional = false
-version = "1.0.59"
+optional = true
+version = "1.0.61"
 
 [dependencies.ron]
-optional = false
-version = "0.6.2"
+optional = true
+version = "0.6.4"
 
 [dependencies.serde_yaml]
-optional = false
+optional = true
 version = "0.8.14"
 
 [dependencies.bincode]
-optional = false
+optional = true
 version = "1.3.1"
 
-# [features]
-# default = []
-# json_ser = ["serde_json"]
-# ron_ser = ["ron"]
-# yaml_ser = ["serde_yaml"]
+[dependencies.base64]
+optional = false
+version = "0.13.0"
+
+[features]
+default = []
+bin_ser = ["bincode"]
+json_ser = ["serde_json"]
+ron_ser = ["ron"]
+yaml_ser = ["serde_yaml"]
 #grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
 
 [dev-dependencies]
@@ -55,5 +64,6 @@ tokio-test = "0.4.0"
 
 [dev-dependencies.cargo-husky]
 version = "1"
-default-features = false # Disable features which are enabled by default
+default-features = false 
 features = ["prepush-hook", "run-cargo-fmt", "run-cargo-clippy"]
+

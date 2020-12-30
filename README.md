@@ -1,8 +1,8 @@
 # RedDb
 
-[![Actions Status](https://github.com/pmagaz/reddb/workflows/ci/badge.svg)](https://github.com/pmagaz/reddb/actions) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
+[![Actions Status](https://github.com/pmagaz/reddb/workflows/build/badge.svg)](https://github.com/pmagaz/reddb/actions) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
 
-`RedDb` is an embedded fast, lightweight, secure and async in-memory data store with [persistance](#persistance) in different serde-compatible formats (bin, json, ron, yaml). RedDb has an easy to use API for [finding](#find), [updating](#update) and [deleting](#finding) your data.
+`RedDb` is an embedded fast, lightweight, secure and async in-memory data store with [persistance](#persistance) in different serde-compatible formats (ron and json at the moment and bindcode and cbor soon). RedDb uses [Tokio](https://github.com/tokio-rs/tokio) fort its easy to use async API for [inserting](#inserting-data), [finding](#finding-data), [updating](#updating-data) and [deleting](#deleting-data) data.
 
 ## Quickstart
 
@@ -10,22 +10,23 @@ Add RedDb to your `Cargo.toml` specifing what serializer you want to use:
 
 ```toml
 [dependencies.RedDb]
-version = "0.2.0"
-features = ["bin_ser"] # Binary serialization / deserialization
+version = "0.2.1"
 features = ["json_ser"] # Json serialization / deserialization
 features = ["ron_ser"] # Ron serialization / deserialization
-features = ["yaml_ser"] # Yaml serialization / deserialization
+features = ["json_ser"] # Json serialization / deserialization
+
 ```
 
 ```rust
-use reddb::{Document, RonDb,JsonStore,YamlStore};
+use reddb::{Document, RonDb};
 
 #[derive(Clone, Serialize, PartialEq, Deserialize)]
 struct MyStruct {
   foo: String,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
   // RedDb with RON persistance for MyStruct structs
   let db = RonDb::new::<MyStruct>("my.db").unwrap();
   let my_struct = MyStruct {
@@ -33,11 +34,11 @@ fn main() -> Result<()> {
   };
 
   // Insert data
-  let doc: Document<MyStruct> = db.insert_one(my_struct)?;
+  let doc = db.insert_one(my_struct).await?;
   // Find by uuid
-  let my_doc: Document<MyStruct> = db.find_one(&doc.uuid)?;
+  let my_doc: Document<MyStruct> = db.find_one(&doc.uuid).await?;
   // Find all records equal to my_struct
-  let my_docs : Vec<Document<MyStruct>> = db.find(&my_struct)?;
+  let my_docs : Vec<Document<MyStruct>> = db.find(&my_struct).await?;
   Ok(())
 }
 ```
@@ -65,8 +66,9 @@ Data is serialized and deserialized in different serde-compatible formats (json,
 
 ```rust
 pub struct Document<T> {
-  pub id: Uuid,
+  pub _id: Uuid,
   pub data: T,
+  pub _st: Status,
 }
 ```
 
@@ -76,7 +78,7 @@ Since data field is a generic you can store any kind of data you want. As you wi
 
 RedDb's persistence uses an append-only format (AOF) so all write operations (Insert, Update, Delete) are added to to the end of the database file. The database is automatically compacted in just one line per object/record everytime you start the database in your application.
 
-The API provides bulk-like write operations (insert & update) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
+The API provides bulk-like write operations (insert, update and delete) for vectors of data that are faster to persist due to hd sync operations. Use them instead iterate over the `*_one()` methods you'll see on the API.
 
 ### Inserting Data
 
@@ -94,7 +96,7 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let doc: Document<TestStruct> = store.insert_one(my_struct)?;
+let doc: Document<TestStruct> = store.insert_one(my_struct).await?;
 println!("{:?}", doc.uuid);
 // 94d69737-4b2e-4985-aaa1-e28bbff2e6d0
 ```
@@ -111,7 +113,7 @@ MyStruct {
   foo: String::from("two"),
 }];
 
-let docs: Vec<Document<MyStruct>> = db.insert(my_docs)?;
+let docs: Vec<Document<MyStruct>> = db.insert(my_docs).await?;
 ```
 
 ### Finding Data
@@ -127,8 +129,8 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let inserted_doc : Document<TestStruct> = db.insert_one(my_struct)?;
-let doc: Document<MyStruct> = db.find_one(&inserted_doc.uuid)?;
+let inserted_doc = db.insert_one(my_struct).await?;
+let doc: Document<MyStruct> = db.find_one(&inserted_doc.uuid).await?;
 ```
 
 #### Find
@@ -150,8 +152,8 @@ let three = MyStruct {
 
 
 let many = vec![one.clone(), two.clone(), three.clone()];
-let inserted_doc : Document<MyStruct> = db.insert(many)?;
-let docs: Vec<Document<MyStruct>> = db.find(&one)?;
+let inserted_doc : Document<MyStruct> = db.insert(many).await?;
+let docs: Vec<Document<MyStruct>> = db.find(&one).await?;
 ```
 
 ### Updating Data
@@ -171,8 +173,8 @@ let new_value = MyStruct {
   foo: String::from("bye"),
 };
 
-let inserted_doc : Document<MyStruct> = db.insert_one(my_struct)?;
-let updated: bool = db.update_one(&inserted_doc.uuid, new_value))?;
+let inserted_doc = db.insert_one(my_struct).await?;
+let updated: bool = db.update_one(&inserted_doc.uuid, new_value)).await?;
 ```
 
 #### Update
@@ -188,7 +190,7 @@ let new_value = MyStruct {
   foo: String::from("bye"),
 };
 
-let updated: usize = store.update(&search, &new_value)?;
+let updated: usize = store.update(&search, &new_value).await?;
 ```
 
 ### Deleting Data
@@ -202,8 +204,8 @@ let my_struct = MyStruct {
   foo: String::from("hello")
 };
 
-let doc: Document<MyStruct> = db.insert_one(my_struct)?;
-let deleted : bool = db.delete_one(&doc.uuid))?;
+let doc = db.insert_one(my_struct).await?;
+let deleted : bool = db.delete_one(&doc.uuid)).await?;
 ```
 
 #### Delete
@@ -215,22 +217,16 @@ let search = MyStruct {
   foo: String::from("hello")
 };
 
-let deleted = store.delete(&search)?;
+let deleted = store.delete(&search).await?;
 println!("{:?}", updated);
 // 1
 ```
 
 ## License
 
-This library is licensed under either of
+This library is licensed under
 
-- Apache License, Version 2.0
-  ([LICENSE-APACHE](https://github.com/pmagaz/reddb/blob/master/LICENSE-APACHE)
-  or
-  [apache.org/licenses/LICENSE-2.0](https://apache.org/licenses/LICENSE-2.0))
 - MIT license
   ([LICENSE-MIT](https://github.com/pmagaz/reddb/blob/master/LICENSE-MIT)
   or
   [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT))
-
-at your option.
