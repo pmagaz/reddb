@@ -3,7 +3,6 @@ use core::fmt::Debug;
 use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Instant;
 
 use super::Storage;
 use crate::document::Document;
@@ -65,8 +64,6 @@ where
         let reader = BufReader::new(&mut *file);
 
         let mut lines = reader.lines();
-        let mut records = 0;
-        let start = Instant::now();
 
         while let Some(line) = lines.next_line().await.unwrap() {
             let byte_str = &line.into_bytes();
@@ -75,33 +72,20 @@ where
                 .deserialize(byte_str)
                 .context(RedDbErrorKind::DataCorruption)
                 .unwrap();
-            let id = document._id;
+            let id = document.uuid;
             let st = document._st;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
-            records += 1;
             if let Status::De = st {
                 map.remove(&id);
             } else {
                 map.entry(id).or_insert_with(|| serialized);
             }
         }
-        let duration = start.elapsed();
-
-        println!("[RedDb] {:?} records loaded ({:?})", &records, duration);
-        println!("[RedDb] Compacting data...");
-        let start = Instant::now();
 
         self.compact_data::<T>(&map)
             .await
             .context(RedDbErrorKind::Compact)?;
-        let duration = start.elapsed();
-
-        println!(
-            "[RedDb] {:?} records compacted ({:?})",
-            &map.len(),
-            duration
-        );
 
         Ok(map)
     }
@@ -225,7 +209,7 @@ mod tests {
     //     let map: RedDbHM = storage.load::<TestStruct>().await.unwrap();
     //     let one: TestStruct = storage
     //         .serializer
-    //         .deserialize(&map.get(&doc_one._id).unwrap())
+    //         .deserialize(&map.get(&doc_one.uuid).unwrap())
     //         .unwrap();
     //     // assert_eq!(one, doc_one.data);
     // }
