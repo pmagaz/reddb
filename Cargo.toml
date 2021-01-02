@@ -2,10 +2,10 @@
 name = "reddb"
 version = "0.2.2"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
-description = "Minimalistic in-memory embedded document data base with persistance"
+description = "Minimalistic in-memory embedded database with persistance"
 homepage = "https://github.com/pmagaz/reddb"
 repository = "https://github.com/pmagaz/reddb"
-keywords = ["database", "store", "document", "async", "embedded"]
+keywords = ["database", "db", "async", "store", "embedded"]
 categories = ["database","database-implementations", "asynchronous"]
 documentation = "https://docs.rs/RedDb"
 edition = "2018"
