@@ -98,8 +98,8 @@ where
 
         let docs: Vec<Uuid> = data
             .iter()
-            .filter(|(uuid, value)| **value == serialized)
-            .map(|(id, _value)| *id)
+            .filter(|(_uuid, value)| **value == serialized)
+            .map(|(uuid, _value)| *uuid)
             .collect();
 
         Ok(docs)
@@ -245,10 +245,10 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter()
-            .filter(|(uuid, data)| **data == serialized)
-            .map(|(id, data)| {
+            .filter(|(_uuid, data)| **data == serialized)
+            .map(|(uuid, data)| {
                 let data = self.deserialize(&*data).unwrap();
-                self.create_doc(id, data, Status::In)
+                self.create_doc(uuid, data, Status::In)
             })
             .collect();
 
@@ -268,10 +268,10 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter_mut()
-            .filter(|(uuid, data)| **data == query)
-            .map(|(id, data)| {
+            .filter(|(_uuid, data)| **data == query)
+            .map(|(uuid, data)| {
                 *data = self.serialize(new_value).unwrap();
-                self.create_doc(id, new_value.to_owned(), Status::Up)
+                self.create_doc(uuid, new_value.to_owned(), Status::Up)
             })
             .collect();
 
@@ -289,10 +289,10 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let ids = self.find_uuids(search).await?;
+        let uuids = self.find_uuids(search).await?;
 
-        let docs: Vec<Document<T>> = stream::iter(ids)
-            .then(|id| self.remove_document(id))
+        let docs: Vec<Document<T>> = stream::iter(uuids)
+            .then(|uuid| self.remove_document(uuid))
             .try_collect()
             .await?;
 
@@ -371,16 +371,16 @@ mod tests {
             })
             .await
             .unwrap();
-        let ids: Vec<Uuid> = db
+        let uuids: Vec<Uuid> = db
             .find_uuids(&TestStruct {
                 foo: "test".to_owned(),
             })
             .await
             .unwrap();
 
-        assert_eq!(ids.contains(&doc.uuid), true);
-        assert_eq!(ids.contains(&doc2.uuid), false);
-        assert_eq!(ids.contains(&doc3.uuid), true);
+        assert_eq!(uuids.contains(&doc.uuid), true);
+        assert_eq!(uuids.contains(&doc2.uuid), false);
+        assert_eq!(uuids.contains(&doc3.uuid), true);
 
         fs::remove_file(".test.db.ron").unwrap();
     }
