@@ -2,7 +2,7 @@
 
 [![Actions Status](https://github.com/pmagaz/reddb/workflows/build/badge.svg)](https://github.com/pmagaz/reddb/actions) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
 
-`RedDb` is an embedded fast, lightweight, secure and async in-memory data store with [persistance](#persistance) in different serde-compatible formats (ron and json at the moment and bindcode and cbor soon). RedDb uses [Tokio](https://github.com/tokio-rs/tokio) fort its easy to use async API for [inserting](#inserting-data), [finding](#finding-data), [updating](#updating-data) and [deleting](#deleting-data) data.
+`RedDb` is an async, fast, lightweight and embedded in-memory data store with [persistance](#persistance) in different serde-compatible formats (ron and json at the moment and bindcode and cbor soon). RedDb uses [Tokio](https://github.com/tokio-rs/tokio) fort its easy to use async API for [inserting](#inserting-data), [finding](#finding-data), [updating](#updating-data) and [deleting](#deleting-data) data.
 
 ## Quickstart
 
@@ -10,7 +10,7 @@ Add RedDb to your `Cargo.toml` specifing what serializer you want to use:
 
 ```toml
 [dependencies.RedDb]
-version = "0.2.1"
+version = "0.2.2"
 features = ["ron_ser"] # Ron serialization / deserialization
 features = ["json_ser"] # Json serialization / deserialization
 
@@ -48,7 +48,7 @@ RedDb is the migration of a side project originally written in NodeJs that was d
 
 ## When
 
-If you are looking for a classic Key/Value storage you will find better options since RedDb is not a Key/Value storage per se. Even though you can store any kind of [data](#Data), RedDb was designed to store Structs and peform basic search operations in those Structs. Said that, if yo if you are looking for an embedded fast, lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice.
+If you are looking for a classic Key/Value storage you will find better options since RedDb is not a Key/Value (RedDb uses autogeneratd Uuids). You can store any kind of [data](#Data) since data will be handled as a [generic](#Data) but RedDb was designed to store Objects/Structs and peform basic search operations in those Structs. Said that, if yo if you are looking for an lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice!
 
 ## API
 
@@ -65,7 +65,7 @@ Data is serialized and deserialized in different serde-compatible formats (json,
 
 ```rust
 pub struct Document<T> {
-  pub _id: Uuid,
+  pub uuid: Uuid,
   pub data: T,
   pub _st: Status,
 }
@@ -96,7 +96,7 @@ let my_struct = MyStruct {
 };
 
 let doc: Document<TestStruct> = store.insert_one(my_struct).await?;
-println!("{:?}", doc.uuid);
+dbg!("{:?}", doc.uuid);
 // 94d69737-4b2e-4985-aaa1-e28bbff2e6d0
 ```
 
@@ -217,7 +217,7 @@ let search = MyStruct {
 };
 
 let deleted = store.delete(&search).await?;
-println!("{:?}", updated);
+dbg!("{:?}", updated);
 // 1
 ```
 

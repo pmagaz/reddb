@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
 use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use uuid::Uuid;
@@ -51,9 +50,8 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        println!("[RedDb] Loading data...");
-
         let mut rt = Runtime::new().unwrap();
+
         let (data, storage) = thread::spawn(move || {
             let storage = rt.block_on(async { ST::new(db_name).await.unwrap() });
             let data = rt.block_on(async { storage.load::<T>().await.unwrap() });
@@ -86,7 +84,7 @@ where
         Document::new(*id, value, status)
     }
 
-    async fn find_ids<T>(&self, search: &T) -> Result<Vec<Uuid>>
+    async fn find_uuids<T>(&self, search: &T) -> Result<Vec<Uuid>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
@@ -100,8 +98,8 @@ where
 
         let docs: Vec<Uuid> = data
             .iter()
-            .filter(|(_id, value)| **value == serialized)
-            .map(|(id, _value)| *id)
+            .filter(|(_uuid, value)| **value == serialized)
+            .map(|(uuid, _value)| *uuid)
             .collect();
 
         Ok(docs)
@@ -124,14 +122,11 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
-        let start = Instant::now();
         let doc = self.insert_document(value).await?;
         self.storage
             .persist(&[doc.to_owned()])
             .await
             .context(RedDbErrorKind::Datapersist)?;
-        let duration = start.elapsed();
-        println!("[RedDb] insert_one {:?} records in ({:?})", 1, duration);
         Ok(doc)
     }
 
@@ -139,8 +134,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let start = Instant::now();
-
         let docs: Vec<Document<T>> = stream::iter(values)
             .then(|data| self.insert_document(data))
             .try_collect()
@@ -150,8 +143,6 @@ where
             .persist(&docs)
             .await
             .context(RedDbErrorKind::Datapersist)?;
-        let duration = start.elapsed();
-        println!("[RedDb] insert {:?} records ({:?})", docs.len(), duration);
 
         Ok(docs)
     }
@@ -160,8 +151,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let start = Instant::now();
-
         let data = self
             .read()
             .await
@@ -173,8 +162,6 @@ where
 
         let data = self.deserialize(&*data)?;
         let doc = self.create_doc(id, data, Status::In);
-        let duration = start.elapsed();
-        println!("[RedDb] find_one executed in ({:?})", duration);
         Ok(doc)
     }
 
@@ -182,8 +169,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let start = Instant::now();
-
         let mut data = self
             .write()
             .await
@@ -202,8 +187,6 @@ where
                 .await
                 .context(RedDbErrorKind::Datapersist)?;
 
-            let duration = start.elapsed();
-            println!("[RedDb] update_one executed in ({:?})", duration);
             Ok(true)
         } else {
             Ok(false)
@@ -233,8 +216,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let start = Instant::now();
-
         let data = self
             .read()
             .await
@@ -247,8 +228,6 @@ where
                 self.create_doc(id, data, Status::In)
             })
             .collect();
-        let duration = start.elapsed();
-        println!("[RedDb] find_all {:?} records ({:?})", docs.len(), duration);
 
         Ok(docs)
     }
@@ -257,8 +236,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let start = Instant::now();
-
         let data = self
             .read()
             .await
@@ -268,15 +245,12 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter()
-            .filter(|(_id, data)| **data == serialized)
-            .map(|(id, data)| {
+            .filter(|(_uuid, data)| **data == serialized)
+            .map(|(uuid, data)| {
                 let data = self.deserialize(&*data).unwrap();
-                self.create_doc(id, data, Status::In)
+                self.create_doc(uuid, data, Status::In)
             })
             .collect();
-
-        let duration = start.elapsed();
-        println!("[RedDb] find {:?} records ({:?})", docs.len(), duration);
 
         Ok(docs)
     }
@@ -285,8 +259,6 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq + Send + Sync,
     {
-        let start = Instant::now();
-
         let mut data = self
             .write()
             .await
@@ -296,10 +268,10 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter_mut()
-            .filter(|(_id, data)| **data == query)
-            .map(|(id, data)| {
+            .filter(|(_uuid, data)| **data == query)
+            .map(|(uuid, data)| {
                 *data = self.serialize(new_value).unwrap();
-                self.create_doc(id, new_value.to_owned(), Status::Up)
+                self.create_doc(uuid, new_value.to_owned(), Status::Up)
             })
             .collect();
 
@@ -310,9 +282,6 @@ where
             .await
             .context(RedDbErrorKind::Datapersist)?;
 
-        let duration = start.elapsed();
-        println!("[RedDb] update {:?} records ({:?})", docs.len(), duration);
-
         Ok(result)
     }
 
@@ -320,12 +289,10 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let start = Instant::now();
+        let uuids = self.find_uuids(search).await?;
 
-        let ids = self.find_ids(search).await?;
-
-        let docs: Vec<Document<T>> = stream::iter(ids)
-            .then(|id| self.remove_document(id))
+        let docs: Vec<Document<T>> = stream::iter(uuids)
+            .then(|uuid| self.remove_document(uuid))
             .try_collect()
             .await?;
 
@@ -334,8 +301,6 @@ where
             .await
             .context(RedDbErrorKind::Datapersist)?;
 
-        let duration = start.elapsed();
-        println!("[RedDb] delete {:?} records ({:?})", docs.len(), duration);
         Ok(docs.len())
     }
 
@@ -375,16 +340,16 @@ mod tests {
     #[tokio::test]
     async fn insert_document() {
         let db = RonDb::new::<TestStruct>(".test.db").unwrap();
-        let _id = &Uuid::new_v4();
+        let uuid = &Uuid::new_v4();
         let data = TestStruct {
             foo: "test".to_owned(),
         };
         let doc: Document<TestStruct> = db.insert_document(data).await.unwrap();
-        let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
+        let find: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
         assert_eq!(find.data, doc.data);
     }
     #[tokio::test]
-    async fn find_ids() {
+    async fn find_uuids() {
         let db = RonDb::new::<TestStruct>(".test.db").unwrap();
         let doc: Document<TestStruct> = db
             .insert_document(TestStruct {
@@ -406,16 +371,16 @@ mod tests {
             })
             .await
             .unwrap();
-        let ids: Vec<Uuid> = db
-            .find_ids(&TestStruct {
+        let uuids: Vec<Uuid> = db
+            .find_uuids(&TestStruct {
                 foo: "test".to_owned(),
             })
             .await
             .unwrap();
 
-        assert_eq!(ids.contains(&doc._id), true);
-        assert_eq!(ids.contains(&doc2._id), false);
-        assert_eq!(ids.contains(&doc3._id), true);
+        assert_eq!(uuids.contains(&doc.uuid), true);
+        assert_eq!(uuids.contains(&doc2.uuid), false);
+        assert_eq!(uuids.contains(&doc3.uuid), true);
 
         fs::remove_file(".test.db.ron").unwrap();
     }
@@ -429,8 +394,8 @@ mod tests {
             .await
             .unwrap();
 
-        let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
-        assert_eq!(find._id, doc._id);
+        let find: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
+        assert_eq!(find.uuid, doc.uuid);
         assert_eq!(find.data, doc.data);
 
         fs::remove_file(".insert_and_find_one.db.ron").unwrap();
@@ -465,8 +430,8 @@ mod tests {
         };
 
         let doc = db.insert_one(original.clone()).await.unwrap();
-        db.update_one(&doc._id, updated.clone()).await.unwrap();
-        let result: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
+        db.update_one(&doc.uuid, updated.clone()).await.unwrap();
+        let result: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
         assert_eq!(result.data, updated);
         fs::remove_file(".update_one.db.ron").unwrap();
     }
@@ -498,11 +463,11 @@ mod tests {
         };
 
         let doc = db.insert_one(search.clone()).await.unwrap();
-        let deleted = db.delete_one(&doc._id).await.unwrap();
+        let deleted = db.delete_one(&doc.uuid).await.unwrap();
         assert_eq!(
             deleted,
             Document {
-                _id: doc._id,
+                uuid: doc.uuid,
                 data: doc.data,
                 _st: Status::De
             }
