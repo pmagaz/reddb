@@ -2,7 +2,7 @@
 
 [![Actions Status](https://github.com/pmagaz/reddb/workflows/build/badge.svg)](https://github.com/pmagaz/reddb/actions) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
 
-`RedDb` is an async, fast, lightweight and embedded in-memory data store with [persistance](#persistance) in different serde-compatible formats (ron and json at the moment and bindcode and cbor soon). RedDb uses [Tokio](https://github.com/tokio-rs/tokio) fort its easy to use async API for [inserting](#inserting-data), [finding](#finding-data), [updating](#updating-data) and [deleting](#deleting-data) data.
+`RedDb` is an async, fast, lightweight and embedded in-memory database with [persistance](#persistance) in different serde-compatible formats (ron and json at the moment and bindcode and cbor soon). RedDb uses [Tokio](https://github.com/tokio-rs/tokio) fort its easy to use async API for [inserting](#inserting-data), [finding](#finding-data), [updating](#updating-data) and [deleting](#deleting-data) data.
 
 ## Quickstart
 
