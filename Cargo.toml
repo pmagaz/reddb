@@ -1,12 +1,12 @@
 [package]
 name = "reddb"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
 description = "Minimalistic in-memory embedded document data base with persistance"
 homepage = "https://github.com/pmagaz/reddb"
 repository = "https://github.com/pmagaz/reddb"
-keywords = ["database", "store", "document", "object-document", "embedded"]
-categories = ["database","database-implementations"]
+keywords = ["database", "store", "document", "async", "embedded"]
+categories = ["database","database-implementations", "asynchronous"]
 documentation = "https://docs.rs/RedDb"
 edition = "2018"
 readme = "README.md"
