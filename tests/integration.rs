@@ -75,8 +75,8 @@ async fn update_one_and_persist<'a>() {
     let update = TestStruct {
         foo: "updated".to_owned(),
     };
-    db.update_one(&doc._id, update.clone()).await.unwrap();
-    let updated: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
+    db.update_one(&doc.uuid, update.clone()).await.unwrap();
+    let updated: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
     let file = File::open(".update_one_persist.db.ron").unwrap();
     let buffered = BufReader::new(file);
     let mut key = 1;
@@ -113,20 +113,20 @@ async fn update_and_persist<'a>() {
     let file = File::open(".update_persist.db.ron").unwrap();
     let buffered = BufReader::new(file);
     let mut key = 0;
-    let mut arr_ids: Vec<Uuid> = vec![];
+    let mut arruuids: Vec<Uuid> = vec![];
     for line in buffered.lines() {
         let byte_str = &line.unwrap().into_bytes();
         let persisted: Document<TestStruct> = ::ron::de::from_bytes(byte_str).unwrap();
         match key {
-            0 => arr_ids.push(persisted._id),
-            1 => arr_ids.push(persisted._id),
+            0 => arruuids.push(persisted.uuid),
+            1 => arruuids.push(persisted.uuid),
             4 => {
                 assert_eq!(persisted.data, updated);
-                assert_eq!(arr_ids.contains(&persisted._id), true);
+                assert_eq!(arruuids.contains(&persisted.uuid), true);
             }
             5 => {
                 assert_eq!(persisted.data, updated);
-                assert_eq!(arr_ids.contains(&persisted._id), true);
+                assert_eq!(arruuids.contains(&persisted.uuid), true);
             }
             _ => println!("Woops!"),
         }
