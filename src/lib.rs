@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
 use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use uuid::Uuid;
