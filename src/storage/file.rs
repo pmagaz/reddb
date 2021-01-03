@@ -72,7 +72,7 @@ where
                 .deserialize(byte_str)
                 .context(RedDbErrorKind::DataCorruption)
                 .unwrap();
-            let id = document.uuid;
+            let id = document._id;
             let st = document._st;
             let data = document.data;
             let serialized = self.serializer.serialize(&data).unwrap();
@@ -209,7 +209,7 @@ mod tests {
     //     let map: RedDbHM = storage.load::<TestStruct>().await.unwrap();
     //     let one: TestStruct = storage
     //         .serializer
-    //         .deserialize(&map.get(&doc_one.uuid).unwrap())
+    //         .deserialize(&map.get(&doc_one._id).unwrap())
     //         .unwrap();
     //     // assert_eq!(one, doc_one.data);
     // }

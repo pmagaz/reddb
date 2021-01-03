@@ -28,9 +28,9 @@ pub enum RedDbErrorKind {
     #[fail(display = "Could not persist data into storage")]
     Datapersist,
     // uuids
-    #[fail(display = "Could not find uuid {}", uuid)]
-    NotFound { uuid: Uuid },
-    #[fail(display = "Could not delete uuid")]
+    #[fail(display = "Could not find _id {}", _id)]
+    NotFound { _id: Uuid },
+    #[fail(display = "Could not delete _id")]
     Deletekey,
     #[fail(display = "Could not unlock mutex")]
     Mutex,

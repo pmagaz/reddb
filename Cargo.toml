@@ -1,6 +1,6 @@
 [package]
 name = "reddb"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Pablo Magaz <magazpablo@gmail.com>"]
 description = "Minimalistic in-memory embedded database with persistance"
 homepage = "https://github.com/pmagaz/reddb"
@@ -21,7 +21,7 @@ path = "src/lib.rs"
 [dependencies]
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
 failure = "0.1.8"
-tokio = { version = "0.2", features = ["macros","fs","stream","sync"] }
+tokio = { version = "0.2", features = ["macros","fs","stream","sync","rt-util"] }
 serde = { version = "1.0", features = ["derive"] }
 futures = "0.3.8"
 async-trait = "0.1.42"
@@ -61,9 +61,9 @@ yaml_ser = ["serde_yaml"]
 grcov = "0.6.1"
 tokio-test = "0.4.0"
 
-
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false 
 features = ["prepush-hook", "run-cargo-fmt", "run-cargo-clippy"]
+
 
