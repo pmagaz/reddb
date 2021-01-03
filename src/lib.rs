@@ -98,8 +98,8 @@ where
 
         let docs: Vec<Uuid> = data
             .iter()
-            .filter(|(_uuid, value)| **value == serialized)
-            .map(|(uuid, _value)| *uuid)
+            .filter(|(_id, value)| **value == serialized)
+            .map(|(_id, _value)| *_id)
             .collect();
 
         Ok(docs)
@@ -156,9 +156,7 @@ where
             .await
             .map_err(|_| RedDbErrorKind::PoisonedValue)?;
 
-        let data = data
-            .get(&id)
-            .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
+        let data = data.get(&id).ok_or(RedDbErrorKind::NotFound { _id: *id })?;
 
         let data = self.deserialize(&*data)?;
         let doc = self.create_doc(id, data, Status::In);
@@ -177,7 +175,7 @@ where
         if data.contains_key(id) {
             let data = data
                 .get_mut(&id)
-                .ok_or(RedDbErrorKind::NotFound { uuid: *id })?;
+                .ok_or(RedDbErrorKind::NotFound { _id: *id })?;
 
             *data = self.serialize(&new_value)?;
             let doc = self.create_doc(id, new_value, Status::Up);
@@ -245,10 +243,10 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter()
-            .filter(|(_uuid, data)| **data == serialized)
-            .map(|(uuid, data)| {
+            .filter(|(_id, data)| **data == serialized)
+            .map(|(_id, data)| {
                 let data = self.deserialize(&*data).unwrap();
-                self.create_doc(uuid, data, Status::In)
+                self.create_doc(_id, data, Status::In)
             })
             .collect();
 
@@ -268,10 +266,10 @@ where
 
         let docs: Vec<Document<T>> = data
             .iter_mut()
-            .filter(|(_uuid, data)| **data == query)
-            .map(|(uuid, data)| {
+            .filter(|(_id, data)| **data == query)
+            .map(|(_id, data)| {
                 *data = self.serialize(new_value).unwrap();
-                self.create_doc(uuid, new_value.to_owned(), Status::Up)
+                self.create_doc(_id, new_value.to_owned(), Status::Up)
             })
             .collect();
 
@@ -292,7 +290,7 @@ where
         let uuids = self.find_uuids(search).await?;
 
         let docs: Vec<Document<T>> = stream::iter(uuids)
-            .then(|uuid| self.remove_document(uuid))
+            .then(|_id| self.remove_document(_id))
             .try_collect()
             .await?;
 
@@ -340,12 +338,12 @@ mod tests {
     #[tokio::test]
     async fn insert_document() {
         let db = RonDb::new::<TestStruct>(".test.db").unwrap();
-        let uuid = &Uuid::new_v4();
+        let _id = &Uuid::new_v4();
         let data = TestStruct {
             foo: "test".to_owned(),
         };
         let doc: Document<TestStruct> = db.insert_document(data).await.unwrap();
-        let find: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
+        let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
         assert_eq!(find.data, doc.data);
     }
     #[tokio::test]
@@ -378,9 +376,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(uuids.contains(&doc.uuid), true);
-        assert_eq!(uuids.contains(&doc2.uuid), false);
-        assert_eq!(uuids.contains(&doc3.uuid), true);
+        assert_eq!(uuids.contains(&doc._id), true);
+        assert_eq!(uuids.contains(&doc2._id), false);
+        assert_eq!(uuids.contains(&doc3._id), true);
 
         fs::remove_file(".test.db.ron").unwrap();
     }
@@ -394,8 +392,8 @@ mod tests {
             .await
             .unwrap();
 
-        let find: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
-        assert_eq!(find.uuid, doc.uuid);
+        let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
+        assert_eq!(find._id, doc._id);
         assert_eq!(find.data, doc.data);
 
         fs::remove_file(".insert_and_find_one.db.ron").unwrap();
@@ -430,8 +428,8 @@ mod tests {
         };
 
         let doc = db.insert_one(original.clone()).await.unwrap();
-        db.update_one(&doc.uuid, updated.clone()).await.unwrap();
-        let result: Document<TestStruct> = db.find_one(&doc.uuid).await.unwrap();
+        db.update_one(&doc._id, updated.clone()).await.unwrap();
+        let result: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
         assert_eq!(result.data, updated);
         fs::remove_file(".update_one.db.ron").unwrap();
     }
@@ -463,11 +461,11 @@ mod tests {
         };
 
         let doc = db.insert_one(search.clone()).await.unwrap();
-        let deleted = db.delete_one(&doc.uuid).await.unwrap();
+        let deleted = db.delete_one(&doc._id).await.unwrap();
         assert_eq!(
             deleted,
             Document {
-                uuid: doc.uuid,
+                _id: doc._id,
                 data: doc.data,
                 _st: Status::De
             }
