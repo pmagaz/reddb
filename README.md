@@ -96,7 +96,7 @@ let my_struct = MyStruct {
 };
 
 let doc: Document<TestStruct> = store.insert_one(my_struct).await?;
-dbg!("{:?}", doc._id);
+println!("{:?}", doc._id);
 // 94d69737-4b2e-4985-aaa1-e28bbff2e6d0
 ```
 
@@ -217,7 +217,7 @@ let search = MyStruct {
 };
 
 let deleted = store.delete(&search).await?;
-dbg!("{:?}", updated);
+println!("{:?}", updated);
 // 1
 ```
 
