@@ -60,14 +60,10 @@ yaml_ser = ["serde_yaml"]
 [dev-dependencies]
 grcov = "0.6.1"
 tokio-test = "0.4.0"
-criterion = "0.3"
 
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false 
 features = ["prepush-hook", "run-cargo-fmt", "run-cargo-clippy"]
 
-[[bench]]
-name = "my_benchmark"
-harness = false
 
