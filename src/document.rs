@@ -6,8 +6,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Document<T> {
-    pub uuid: Uuid,
-    //#[serde(flatten)]
+    pub _id: Uuid,
     pub data: T,
     pub _st: Status,
 }
@@ -18,7 +17,7 @@ where
 {
     pub fn new(id: Uuid, data: T, st: Status) -> Self {
         Self {
-            uuid: id,
+            _id: id,
             data,
             _st: st,
         }
