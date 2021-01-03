@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
 
   // Insert data
   let doc = db.insert_one(my_struct).await?;
-  // Find by _id
+  // Find by id
   let my_doc: Document<MyStruct> = db.find_one(&doc._id).await?;
   // Find all records equal to my_struct
   let my_docs : Vec<Document<MyStruct>> = db.find(&my_struct).await?;
@@ -117,11 +117,11 @@ let docs: Vec<Document<MyStruct>> = db.insert(my_docs).await?;
 
 ### Finding Data
 
-There are two ways to find your data. By it's \_id or looking into the database what data matches your query.
+There are two ways to find your data. By it's id or looking into the database what data matches your query.
 
 #### Find one
 
-Performs a search by \_id.
+Performs a search by id.
 
 ```rust
 let my_struct = MyStruct {
@@ -161,7 +161,7 @@ Update data is pretty straightforward. You can update data
 
 #### Update one
 
-Update one record, using it's \_id as search param.
+Update one record, using it's id as search param.
 
 ```rust
 let my_struct = MyStruct {
@@ -196,7 +196,7 @@ let updated: usize = store.update(&search, &new_value).await?;
 
 #### Delete one
 
-Delete a record by it's \_id.
+Delete a record by it's id.
 
 ```rust
 let my_struct = MyStruct {
