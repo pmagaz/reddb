@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::fmt::{self, Display};
+use thiserror::Error;
 use uuid::Uuid;
 
 pub type Result<T> = ::anyhow::Result<T, RedDbError>;
@@ -58,9 +58,7 @@ impl RedDbError {
 
 impl From<RedDbErrorKind> for RedDbError {
     fn from(kind: RedDbErrorKind) -> RedDbError {
-        RedDbError {
-            err: kind,
-        }
+        RedDbError { err: kind }
     }
 }
 
