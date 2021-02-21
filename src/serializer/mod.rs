@@ -1,7 +1,6 @@
-use failure::Error;
+use anyhow::{Result, Error};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
-use std::result::Result;
 
 mod bin;
 mod json;

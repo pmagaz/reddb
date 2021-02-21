@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use uuid::Uuid;
 
-type Result<T, E = Error> = std::result::Result<T, E>;
+type Result<T, E = Error> = anyhow::Result<T, E>;
 
 async fn setup() -> Result<()> {
     if Path::new(".db.yaml").exists() {

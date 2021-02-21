@@ -1,4 +1,3 @@
-use failure::ResultExt;
 use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
 use std::collections::HashMap;
@@ -126,7 +125,7 @@ where
         self.storage
             .persist(&[doc.to_owned()])
             .await
-            .context(RedDbErrorKind::Datapersist)?;
+            .map_err(|_| RedDbErrorKind::Datapersist)?;
         Ok(doc)
     }
 
@@ -142,7 +141,7 @@ where
         self.storage
             .persist(&docs)
             .await
-            .context(RedDbErrorKind::Datapersist)?;
+            .map_err(|_| RedDbErrorKind::Datapersist)?;
 
         Ok(docs)
     }
@@ -183,7 +182,7 @@ where
             self.storage
                 .persist(&[doc])
                 .await
-                .context(RedDbErrorKind::Datapersist)?;
+                .map_err(|_| RedDbErrorKind::Datapersist)?;
 
             Ok(true)
         } else {
@@ -278,7 +277,7 @@ where
         self.storage
             .persist(&docs)
             .await
-            .context(RedDbErrorKind::Datapersist)?;
+            .map_err(|_| RedDbErrorKind::Datapersist)?;
 
         Ok(result)
     }
@@ -297,7 +296,7 @@ where
         self.storage
             .persist(&docs)
             .await
-            .context(RedDbErrorKind::Datapersist)?;
+            .map_err(|_| RedDbErrorKind::Datapersist)?;
 
         Ok(docs.len())
     }
@@ -309,7 +308,7 @@ where
         Ok(self
             .serializer
             .serialize(value)
-            .context(RedDbErrorKind::Serialization)?)
+            .map_err(|_| RedDbErrorKind::Serialization)?)
     }
 
     fn deserialize<T>(&self, value: &[u8]) -> Result<T>
@@ -319,7 +318,7 @@ where
         Ok(self
             .serializer
             .deserialize(value)
-            .context(RedDbErrorKind::Deserialization)?)
+            .map_err(|_| RedDbErrorKind::Deserialization)?)
     }
 }
 
