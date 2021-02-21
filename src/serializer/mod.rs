@@ -1,4 +1,4 @@
-use anyhow::{Result, Error};
+use anyhow::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 
