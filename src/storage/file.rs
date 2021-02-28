@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use core::fmt::Debug;
-use failure::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -70,7 +69,7 @@ where
             let document: Document<T> = self
                 .serializer
                 .deserialize(byte_str)
-                .context(RedDbErrorKind::DataCorruption)
+                .map_err(|_| RedDbErrorKind::DataCorruption)
                 .unwrap();
             let id = document._id;
             let st = document._st;
@@ -85,7 +84,7 @@ where
 
         self.compact_data::<T>(&map)
             .await
-            .context(RedDbErrorKind::Compact)?;
+            .map_err(|_| RedDbErrorKind::Compact)?;
 
         Ok(map)
     }
@@ -101,7 +100,7 @@ where
 
         self.append(&serialized)
             .await
-            .context(RedDbErrorKind::AppendData)?;
+            .map_err(|_| RedDbErrorKind::AppendData)?;
 
         Ok(())
     }
@@ -121,12 +120,12 @@ where
                 let data: T = self
                     .serializer
                     .deserialize(&*data)
-                    .context(RedDbErrorKind::DataCorruption)
+                    .map_err(|_| RedDbErrorKind::DataCorruption)
                     .unwrap();
 
                 self.serializer
                     .serialize(&Document::new(*id, data, Status::In))
-                    .context(RedDbErrorKind::DataCorruption)
+                    .map_err(|_| RedDbErrorKind::DataCorruption)
                     .unwrap()
             })
             .collect();
@@ -144,23 +143,23 @@ where
     async fn flush_data<P: AsRef<Path>>(&self, path: P, data: &[u8]) -> Result<()> {
         let mut storage = File::create(path)
             .await
-            .context(RedDbErrorKind::DataCorruption)?;
+            .map_err(|_| RedDbErrorKind::DataCorruption)?;
         storage
             .set_len(0)
             .await
-            .context(RedDbErrorKind::FlushData)?;
+            .map_err(|_| RedDbErrorKind::FlushData)?;
         storage
             .seek(SeekFrom::Start(0))
             .await
-            .context(RedDbErrorKind::FlushData)?;
+            .map_err(|_| RedDbErrorKind::FlushData)?;
         storage
             .write_all(&data)
             .await
-            .context(RedDbErrorKind::FlushData)?;
+            .map_err(|_| RedDbErrorKind::FlushData)?;
         storage
             .sync_all()
             .await
-            .context(RedDbErrorKind::FlushData)?;
+            .map_err(|_| RedDbErrorKind::FlushData)?;
         Ok(())
     }
 
