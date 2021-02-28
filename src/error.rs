@@ -1,82 +1,64 @@
-use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
+use thiserror::Error;
 use uuid::Uuid;
 
-pub type Result<T> = ::std::result::Result<T, RedDbError>;
+pub type Result<T> = ::anyhow::Result<T, RedDbError>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Error)]
 pub enum RedDbErrorKind {
     //STORAGE
-    #[fail(display = "Data corrupted!")]
+    #[error("Data corrupted!")]
     DataCorruption,
-    #[fail(display = "Data compacted corrupted!")]
+    #[error("Data compacted corrupted!")]
     Compact,
-    #[fail(display = "Could not compact storage")]
+    #[error("Could not compact storage")]
     Storagepersist,
-    #[fail(display = "Could not flush data into storage")]
+    #[error("Could not flush data into storage")]
     FlushData,
-    #[fail(display = "Could not flush data")]
+    #[error("Could not flush data")]
     AppendData,
-    #[fail(display = "Could not append data ")]
+    #[error("Could not append data ")]
     StorageInit,
-    #[fail(display = "Could not init storage")]
+    #[error("Could not init storage")]
     StorageData,
-    #[fail(display = "Could not read storage data")]
+    #[error("Could not read storage data")]
     ReadContent,
-    #[fail(display = "Could not load storage content")]
+    #[error("Could not load storage content")]
     ContentLoad,
-    #[fail(display = "Could not persist data into storage")]
+    #[error("Could not persist data into storage")]
     Datapersist,
     // uuids
-    #[fail(display = "Could not find _id {}", _id)]
+    #[error("Could not find _id {_id}")]
     NotFound { _id: Uuid },
-    #[fail(display = "Could not delete _id")]
+    #[error("Could not delete _id")]
     Deletekey,
-    #[fail(display = "Could not unlock mutex")]
+    #[error("Could not unlock mutex")]
     Mutex,
-    #[fail(display = "Database poisoned!")]
+    #[error("Database poisoned!")]
     Poisoned,
-    #[fail(display = "data poisoned!")]
+    #[error("data poisoned!")]
     PoisonedValue,
     // SERDE
-    #[fail(display = "Could not deserialize data")]
+    #[error("Could not deserialize data")]
     Deserialization,
-    #[fail(display = "Could not serialize data")]
+    #[error("Could not serialize data")]
     Serialization,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub struct RedDbError {
-    err: Context<RedDbErrorKind>,
+    err: RedDbErrorKind,
 }
 
 impl RedDbError {
     pub fn kind(&self) -> RedDbErrorKind {
-        *self.err.get_context()
+        self.err
     }
 }
 
 impl From<RedDbErrorKind> for RedDbError {
     fn from(kind: RedDbErrorKind) -> RedDbError {
-        RedDbError {
-            err: Context::new(kind),
-        }
-    }
-}
-
-impl From<Context<RedDbErrorKind>> for RedDbError {
-    fn from(err: Context<RedDbErrorKind>) -> RedDbError {
-        RedDbError { err }
-    }
-}
-
-impl Fail for RedDbError {
-    fn cause(&self) -> Option<&dyn Fail> {
-        self.err.cause()
-    }
-
-    fn backtrace(&self) -> Option<&Backtrace> {
-        self.err.backtrace()
+        RedDbError { err: kind }
     }
 }
 
