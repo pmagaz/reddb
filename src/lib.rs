@@ -155,7 +155,7 @@ where
             .await
             .map_err(|_| RedDbErrorKind::PoisonedValue)?;
 
-        let data = data.get(&id).ok_or(RedDbErrorKind::NotFound { _id: *id })?;
+        let data = data.get(id).ok_or(RedDbErrorKind::NotFound { _id: *id })?;
 
         let data = self.deserialize(&*data)?;
         let doc = self.create_doc(id, data, Status::In);
@@ -173,7 +173,7 @@ where
 
         if data.contains_key(id) {
             let data = data
-                .get_mut(&id)
+                .get_mut(id)
                 .ok_or(RedDbErrorKind::NotFound { _id: *id })?;
 
             *data = self.serialize(&new_value)?;
