@@ -48,7 +48,7 @@ RedDb is the migration of a side project originally written in NodeJs that was d
 
 ## When
 
-If you are looking for a classic Key/Value storage you will find better options since RedDb is not a Key/Value (RedDb uses autogeneratd Uuids). You can store any kind of [data](#Data) since data will be handled as a [generic](#Data) but RedDb was designed to store Objects/Structs and peform basic search operations in those Structs. Said that, if yo if you are looking for an lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice!
+If you are looking for a classic Key/Value storage you will find better options since RedDb is not a Key/Value (RedDb uses autogeneratd Uuids). You can store any kind of [data](#Data) since data will be handled as a [generic](#Data) but RedDb was designed to store Objects/Structs and peform basic search operations in those Structs. Said that, if you are looking for a lightweight and easy to use in-memory data store with [persistance](#persistance), RedDb could be a good choice!
 
 ## API
 
