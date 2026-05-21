@@ -15,9 +15,13 @@ impl Serializer for Yaml {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        // serde_yaml::to_string already appends a trailing newline, which is
-        // required while storage uses line-based reading.
-        Ok(serde_yaml::to_string(data)?.into_bytes())
+        let mut bytes = serde_yaml::to_string(data)?.into_bytes();
+        // serde_yaml appends a trailing newline; strip it so record framing
+        // is handled exclusively by the storage layer.
+        if bytes.last() == Some(&b'\n') {
+            bytes.pop();
+        }
+        Ok(bytes)
     }
 
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
@@ -45,6 +49,13 @@ mod tests {
         let ser = Yaml.serialize(&s).unwrap();
         let de: S = Yaml.deserialize(&ser).unwrap();
         assert_eq!(de, s);
+    }
+
+    #[test]
+    fn no_trailing_newline() {
+        let s = S { x: 1 };
+        let bytes = Yaml.serialize(&s).unwrap();
+        assert_ne!(bytes.last().copied(), Some(b'\n'));
     }
 
     #[test]

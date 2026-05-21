@@ -15,10 +15,7 @@ impl Serializer for Json {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        // Trailing \n required while storage uses line-based reading.
-        let mut bytes = serde_json::to_vec(data)?;
-        bytes.push(b'\n');
-        Ok(bytes)
+        Ok(serde_json::to_vec(data)?)
     }
 
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
@@ -46,6 +43,13 @@ mod tests {
         let ser = Json.serialize(&s).unwrap();
         let de: S = Json.deserialize(&ser).unwrap();
         assert_eq!(de, s);
+    }
+
+    #[test]
+    fn no_trailing_newline() {
+        let s = S { x: 1 };
+        let bytes = Json.serialize(&s).unwrap();
+        assert_ne!(bytes.last().copied(), Some(b'\n'));
     }
 
     #[test]

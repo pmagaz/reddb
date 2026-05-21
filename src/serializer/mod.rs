@@ -16,12 +16,14 @@ pub use self::ron::Ron;
 pub use self::yaml::Yaml;
 
 /// Identifies the serialization format and its file extension.
+/// The `u8` discriminant is stored in the 32-byte file header (byte 10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum FormatId {
-    Bin,
-    Json,
-    Yaml,
-    Ron,
+    Json = 0,
+    Ron  = 1,
+    Yaml = 2,
+    Bin  = 3,
 }
 
 impl FormatId {

@@ -15,11 +15,7 @@ impl Serializer for Ron {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        // Trailing \n is required while storage uses line-based reading.
-        // It will be removed when the length-prefix file format lands.
-        let mut bytes = ::ron::ser::to_string(data)?.into_bytes();
-        bytes.push(b'\n');
-        Ok(bytes)
+        Ok(::ron::ser::to_string(data)?.into_bytes())
     }
 
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
@@ -47,6 +43,13 @@ mod tests {
         let ser = Ron.serialize(&s).unwrap();
         let de: S = Ron.deserialize(&ser).unwrap();
         assert_eq!(de, s);
+    }
+
+    #[test]
+    fn no_trailing_newline() {
+        let s = S { x: 1 };
+        let bytes = Ron.serialize(&s).unwrap();
+        assert_ne!(bytes.last().copied(), Some(b'\n'));
     }
 
     #[test]
