@@ -11,7 +11,7 @@ use crate::status::Status;
 use crate::RedDbHM;
 use std::path::Path;
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, SeekFrom};
+use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, SeekFrom};
 
 use tokio::sync::Mutex;
 

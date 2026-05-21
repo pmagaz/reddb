@@ -26,10 +26,7 @@ impl<'a> Serializer<'a> for Yaml {
     where
         for<'de> T: serde::Serialize + serde::Deserialize<'de>,
     {
-        let mut vec = serde_yaml::to_vec(data)?;
-        println!("{:?}4444444444", serde_yaml::to_string(data)?);
-
-        //let mut vec = serde_yaml::to_string(data)?.into_bytes();
+        let mut vec = serde_yaml::to_string(data)?.into_bytes();
         vec.extend(b"\n");
         Ok(vec)
     }

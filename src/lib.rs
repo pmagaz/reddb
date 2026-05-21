@@ -49,7 +49,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
 
         let (data, storage) = thread::spawn(move || {
             let storage = rt.block_on(async { ST::new(db_name).await.unwrap() });
