@@ -45,7 +45,7 @@ pub struct RedDb<SE, ST> {
 
 impl<'a, SE, ST: 'static> RedDb<SE, ST>
 where
-    for<'de> SE: Serializer<'de> + Debug,
+    SE: Serializer + Debug,
     for<'de> ST: Storage + Debug + Send + Sync,
 {
     /// Open or create a database using a [`DbConfig`].

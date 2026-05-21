@@ -4,7 +4,6 @@ use crate::wal::WalOp;
 use crate::RedDbHM;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
-use std::marker::Sized;
 
 mod file;
 

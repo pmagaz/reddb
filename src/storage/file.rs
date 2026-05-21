@@ -7,7 +7,7 @@ use std::path::Path;
 use super::Storage;
 use crate::document::Document;
 use crate::error::{RedDbError, Result};
-use crate::serializer::{Serializer, Serializers};
+use crate::serializer::Serializer;
 use crate::wal::{WalEntry, WalOp};
 use crate::RedDbHM;
 use tokio::fs::{File, OpenOptions};
@@ -24,18 +24,11 @@ pub struct FileStorage<SE> {
 #[async_trait]
 impl<SE> Storage for FileStorage<SE>
 where
-    for<'de> SE: Serializer<'de> + Debug + Sync + Send,
+    SE: Serializer + Debug + Sync + Send,
 {
     async fn new(db_name: &str) -> Result<Self> {
         let serializer = SE::default();
-        let extension = match serializer.format() {
-            Serializers::Bin(st) => st.clone(),
-            Serializers::Json(st) => st.clone(),
-            Serializers::Yaml(st) => st.clone(),
-            Serializers::Ron(st) => st.clone(),
-        };
-
-        let db_path = format!("{}{}", db_name, extension);
+        let db_path = format!("{}{}", db_name, serializer.format_id().extension());
 
         let file = OpenOptions::new()
             .read(true)
@@ -110,7 +103,7 @@ where
 
 impl<SE> FileStorage<SE>
 where
-    for<'de> SE: Serializer<'de> + Debug,
+    SE: Serializer + Debug,
 {
     pub async fn compact_data<T>(&self, data: &RedDbHM) -> Result<()>
     where
