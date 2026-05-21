@@ -2,7 +2,7 @@
 name        = "reddb"
 version     = "2.0.0"
 authors     = ["Pablo Magaz <magazpablo@gmail.com>"]
-description = "Minimalistic async embedded document database with closure-based queries and binary persistence"
+description = "Minimalistic async in-memory embedded document database with closure-based queries and optional persistence"
 homepage    = "https://github.com/pmagaz/reddb"
 repository  = "https://github.com/pmagaz/reddb"
 keywords    = ["database", "db", "async", "store", "embedded"]
