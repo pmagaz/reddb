@@ -15,7 +15,7 @@ mod status;
 mod storage;
 
 pub use document::Document;
-use error::{RedDbErrorKind, Result};
+use error::{RedDbError, Result};
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
 use status::Status;
@@ -57,7 +57,7 @@ where
             (data, storage)
         })
         .join()
-        .map_err(|_| RedDbErrorKind::Datapersist)?;
+        .map_err(|_| RedDbError::PersistFailed("initialization failed".into()))?;
 
         Ok(Self {
             storage,
@@ -67,13 +67,11 @@ where
     }
 
     async fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
-        let lock = self.data.read().await;
-        Ok(lock)
+        Ok(self.data.read().await)
     }
 
     async fn write(&'a self) -> Result<RwLockWriteGuard<'a, RedDbHM>> {
-        let lock = self.data.write().await;
-        Ok(lock)
+        Ok(self.data.write().await)
     }
 
     fn create_doc<T>(&self, id: &Uuid, value: T, status: Status) -> Document<T>
@@ -87,21 +85,16 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self
-            .read()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)
-            .unwrap();
-
+        let data = self.read().await?;
         let serialized = self.serialize(search)?;
 
-        let docs: Vec<Uuid> = data
+        let uuids = data
             .iter()
-            .filter(|(_id, value)| **value == serialized)
-            .map(|(_id, _value)| *_id)
+            .filter(|(_, value)| **value == serialized)
+            .map(|(id, _)| *id)
             .collect();
 
-        Ok(docs)
+        Ok(uuids)
     }
 
     async fn insert_document<T>(&self, value: T) -> Result<Document<T>>
@@ -112,9 +105,7 @@ where
         let id = Uuid::new_v4();
         let serialized = self.serialize(&value)?;
         data.insert(id, serialized);
-        let result = self.create_doc(&id, value, Status::default());
-
-        Ok(result)
+        Ok(self.create_doc(&id, value, Status::default()))
     }
 
     pub async fn insert_one<T>(&self, value: T) -> Result<Document<T>>
@@ -122,10 +113,7 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
         let doc = self.insert_document(value).await?;
-        self.storage
-            .persist(&[doc.to_owned()])
-            .await
-            .map_err(|_| RedDbErrorKind::Datapersist)?;
+        self.storage.persist(&[doc.to_owned()]).await?;
         Ok(doc)
     }
 
@@ -138,11 +126,7 @@ where
             .try_collect()
             .await?;
 
-        self.storage
-            .persist(&docs)
-            .await
-            .map_err(|_| RedDbErrorKind::Datapersist)?;
-
+        self.storage.persist(&docs).await?;
         Ok(docs)
     }
 
@@ -150,40 +134,23 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self
-            .read()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)?;
-
-        let data = data.get(&id).ok_or(RedDbErrorKind::NotFound { _id: *id })?;
-
-        let data = self.deserialize(&*data)?;
-        let doc = self.create_doc(id, data, Status::In);
-        Ok(doc)
+        let data = self.read().await?;
+        let raw = data.get(id).ok_or(RedDbError::NotFound(*id))?;
+        let value = self.deserialize(raw)?;
+        Ok(self.create_doc(id, value, Status::In))
     }
 
     pub async fn update_one<T>(&'a self, id: &Uuid, new_value: T) -> Result<bool>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let mut data = self
-            .write()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)?;
+        let mut data = self.write().await?;
 
         if data.contains_key(id) {
-            let data = data
-                .get_mut(&id)
-                .ok_or(RedDbErrorKind::NotFound { _id: *id })?;
-
-            *data = self.serialize(&new_value)?;
+            let entry = data.get_mut(id).ok_or(RedDbError::NotFound(*id))?;
+            *entry = self.serialize(&new_value)?;
             let doc = self.create_doc(id, new_value, Status::Up);
-
-            self.storage
-                .persist(&[doc])
-                .await
-                .map_err(|_| RedDbErrorKind::Datapersist)?;
-
+            self.storage.persist(&[doc]).await?;
             Ok(true)
         } else {
             Ok(false)
@@ -195,34 +162,29 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
         let mut data = self.write().await?;
-        let value = data.remove(&id).unwrap();
-        let data = self.deserialize(&value)?;
-        let doc = self.create_doc(&id, data, Status::De);
-        Ok(doc)
+        let raw = data.remove(&id).ok_or(RedDbError::NotFound(id))?;
+        let value = self.deserialize(&raw)?;
+        Ok(self.create_doc(&id, value, Status::De))
     }
 
     pub async fn delete_one<T>(&self, id: &Uuid) -> Result<Document<T>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let result = self.remove_document(*id).await?;
-        Ok(result)
+        self.remove_document(*id).await
     }
 
     pub async fn find_all<T>(&self) -> Result<Vec<Document<T>>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self
-            .read()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)?;
+        let data = self.read().await?;
 
-        let docs: Vec<Document<T>> = data
+        let docs = data
             .iter()
-            .map(|(id, data)| {
-                let data = self.deserialize(&*data).unwrap();
-                self.create_doc(id, data, Status::In)
+            .map(|(id, raw)| {
+                let value = self.deserialize(raw).unwrap();
+                self.create_doc(id, value, Status::In)
             })
             .collect();
 
@@ -233,19 +195,15 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self
-            .read()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)?;
-
+        let data = self.read().await?;
         let serialized = self.serialize(search)?;
 
-        let docs: Vec<Document<T>> = data
+        let docs = data
             .iter()
-            .filter(|(_id, data)| **data == serialized)
-            .map(|(_id, data)| {
-                let data = self.deserialize(&*data).unwrap();
-                self.create_doc(_id, data, Status::In)
+            .filter(|(_, raw)| **raw == serialized)
+            .map(|(id, raw)| {
+                let value = self.deserialize(raw).unwrap();
+                self.create_doc(id, value, Status::In)
             })
             .collect();
 
@@ -256,30 +214,21 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq + Send + Sync,
     {
-        let mut data = self
-            .write()
-            .await
-            .map_err(|_| RedDbErrorKind::PoisonedValue)?;
-
+        let mut data = self.write().await?;
         let query = self.serialize(search)?;
 
         let docs: Vec<Document<T>> = data
             .iter_mut()
-            .filter(|(_id, data)| **data == query)
-            .map(|(_id, data)| {
-                *data = self.serialize(new_value).unwrap();
-                self.create_doc(_id, new_value.to_owned(), Status::Up)
+            .filter(|(_, raw)| **raw == query)
+            .map(|(id, raw)| {
+                *raw = self.serialize(new_value).unwrap();
+                self.create_doc(id, new_value.to_owned(), Status::Up)
             })
             .collect();
 
-        let result = docs.len();
-
-        self.storage
-            .persist(&docs)
-            .await
-            .map_err(|_| RedDbErrorKind::Datapersist)?;
-
-        Ok(result)
+        let count = docs.len();
+        self.storage.persist(&docs).await?;
+        Ok(count)
     }
 
     pub async fn delete<T>(&self, search: &T) -> Result<usize>
@@ -289,15 +238,11 @@ where
         let uuids = self.find_uuids(search).await?;
 
         let docs: Vec<Document<T>> = stream::iter(uuids)
-            .then(|_id| self.remove_document(_id))
+            .then(|id| self.remove_document(id))
             .try_collect()
             .await?;
 
-        self.storage
-            .persist(&docs)
-            .await
-            .map_err(|_| RedDbErrorKind::Datapersist)?;
-
+        self.storage.persist(&docs).await?;
         Ok(docs.len())
     }
 
@@ -305,20 +250,18 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        Ok(self
-            .serializer
+        self.serializer
             .serialize(value)
-            .map_err(|_| RedDbErrorKind::Serialization)?)
+            .map_err(|e| RedDbError::Serialize(e.to_string()))
     }
 
     fn deserialize<T>(&self, value: &[u8]) -> Result<T>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        Ok(self
-            .serializer
+        self.serializer
             .deserialize(value)
-            .map_err(|_| RedDbErrorKind::Deserialization)?)
+            .map_err(|e| RedDbError::Deserialize(e.to_string()))
     }
 }
 
@@ -337,95 +280,53 @@ mod tests {
     #[tokio::test]
     async fn insert_document() {
         let db = RonDb::new::<TestStruct>(".test.db").unwrap();
-        let _id = &Uuid::new_v4();
-        let data = TestStruct {
-            foo: "test".to_owned(),
-        };
-        let doc: Document<TestStruct> = db.insert_document(data).await.unwrap();
+        let doc: Document<TestStruct> = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
         assert_eq!(find.data, doc.data);
     }
+
     #[tokio::test]
     async fn find_uuids() {
         let db = RonDb::new::<TestStruct>(".test.db").unwrap();
-        let doc: Document<TestStruct> = db
-            .insert_document(TestStruct {
-                foo: "test".to_owned(),
-            })
-            .await
-            .unwrap();
+        let doc = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
+        let doc2 = db.insert_document(TestStruct { foo: "test2".to_owned() }).await.unwrap();
+        let doc3 = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
 
-        let doc2: Document<TestStruct> = db
-            .insert_document(TestStruct {
-                foo: "test2".to_owned(),
-            })
-            .await
-            .unwrap();
+        let uuids: Vec<Uuid> = db.find_uuids(&TestStruct { foo: "test".to_owned() }).await.unwrap();
 
-        let doc3: Document<TestStruct> = db
-            .insert_document(TestStruct {
-                foo: "test".to_owned(),
-            })
-            .await
-            .unwrap();
-        let uuids: Vec<Uuid> = db
-            .find_uuids(&TestStruct {
-                foo: "test".to_owned(),
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(uuids.contains(&doc._id), true);
-        assert_eq!(uuids.contains(&doc2._id), false);
-        assert_eq!(uuids.contains(&doc3._id), true);
+        assert!(uuids.contains(&doc._id));
+        assert!(!uuids.contains(&doc2._id));
+        assert!(uuids.contains(&doc3._id));
 
         fs::remove_file(".test.db.ron").unwrap();
     }
+
     #[tokio::test]
     async fn insert_and_find_one() {
         let db = RonDb::new::<TestStruct>(".insert_and_find_one.db").unwrap();
-        let doc: Document<TestStruct> = db
-            .insert_one(TestStruct {
-                foo: "test".to_owned(),
-            })
-            .await
-            .unwrap();
-
+        let doc = db.insert_one(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let find: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
         assert_eq!(find._id, doc._id);
         assert_eq!(find.data, doc.data);
-
         fs::remove_file(".insert_and_find_one.db.ron").unwrap();
     }
+
     #[tokio::test]
     async fn find() {
         let db = RonDb::new::<TestStruct>(".find.db").unwrap();
-
-        let one = TestStruct {
-            foo: String::from("one"),
-        };
-
-        let two = TestStruct {
-            foo: String::from("two"),
-        };
-
-        let many = vec![one.clone(), one.clone(), two.clone()];
-        db.insert(many).await.unwrap();
+        let one = TestStruct { foo: String::from("one") };
+        let two = TestStruct { foo: String::from("two") };
+        db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
         let result = db.find(&one).await.unwrap();
         assert_eq!(result.len(), 2);
         fs::remove_file(".find.db.ron").unwrap();
     }
+
     #[tokio::test]
     async fn update_one() {
         let db = RonDb::new::<TestStruct>(".update_one.db").unwrap();
-        let original = TestStruct {
-            foo: "hi".to_owned(),
-        };
-
-        let updated = TestStruct {
-            foo: "bye".to_owned(),
-        };
-
+        let original = TestStruct { foo: "hi".to_owned() };
+        let updated = TestStruct { foo: "bye".to_owned() };
         let doc = db.insert_one(original.clone()).await.unwrap();
         db.update_one(&doc._id, updated.clone()).await.unwrap();
         let result: Document<TestStruct> = db.find_one(&doc._id).await.unwrap();
@@ -436,15 +337,9 @@ mod tests {
     #[tokio::test]
     async fn update() {
         let db = RonDb::new::<TestStruct>(".update.db").unwrap();
-        let one = TestStruct {
-            foo: String::from("one"),
-        };
-        let two = TestStruct {
-            foo: String::from("two"),
-        };
-
-        let many = vec![one.clone(), one.clone(), two.clone()];
-        db.insert(many).await.unwrap();
+        let one = TestStruct { foo: String::from("one") };
+        let two = TestStruct { foo: String::from("two") };
+        db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
         let updated = db.update(&one, &two).await.unwrap();
         assert_eq!(updated, 2);
         let result = db.find(&two).await.unwrap();
@@ -455,48 +350,31 @@ mod tests {
     #[tokio::test]
     async fn delete_and_find_one() {
         let db = RonDb::new::<TestStruct>(".delete_one.db").unwrap();
-        let search = TestStruct {
-            foo: "test".to_owned(),
-        };
-
-        let doc = db.insert_one(search.clone()).await.unwrap();
-        let deleted = db.delete_one(&doc._id).await.unwrap();
-        assert_eq!(
-            deleted,
-            Document {
-                _id: doc._id,
-                data: doc.data,
-                _st: Status::De
-            }
-        );
+        let doc = db.insert_one(TestStruct { foo: "test".to_owned() }).await.unwrap();
+        let deleted: Document<TestStruct> = db.delete_one(&doc._id).await.unwrap();
+        assert_eq!(deleted._id, doc._id);
+        assert_eq!(deleted.data, doc.data);
+        assert_eq!(deleted._st, Status::De);
         fs::remove_file(".delete_one.db.ron").unwrap();
     }
 
+    #[tokio::test]
     async fn delete() {
         let db = RonDb::new::<TestStruct>(".delete.db").unwrap();
-        let one = TestStruct {
-            foo: "one".to_owned(),
-        };
-
-        let two = TestStruct {
-            foo: "two".to_owned(),
-        };
-
-        let many = vec![one.clone(), one.clone(), two.clone()];
-        db.insert(many).await.unwrap();
+        let one = TestStruct { foo: "one".to_owned() };
+        let two = TestStruct { foo: "two".to_owned() };
+        db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
         let deleted = db.delete(&one).await.unwrap();
         assert_eq!(deleted, 2);
-
         let not_deleted = db.delete(&one).await.unwrap();
         assert_eq!(not_deleted, 0);
         fs::remove_file(".delete.db.ron").unwrap();
     }
+
     #[tokio::test]
     async fn serialie_deserialize() {
         let db = RonDb::new::<TestStruct>(".serialize.db").unwrap();
-        let test = TestStruct {
-            foo: "one".to_owned(),
-        };
+        let test = TestStruct { foo: "one".to_owned() };
         let byte_str = [40, 102, 111, 111, 58, 34, 111, 110, 101, 34, 41, 10];
         let serialized = db.serializer.serialize(&test).unwrap();
         assert_eq!(serialized, byte_str);

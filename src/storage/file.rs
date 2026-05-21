@@ -2,17 +2,16 @@ use async_trait::async_trait;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
 
 use super::Storage;
 use crate::document::Document;
-use crate::error::{RedDbErrorKind, Result};
+use crate::error::{RedDbError, Result};
 use crate::serializer::{Serializer, Serializers};
 use crate::status::Status;
 use crate::RedDbHM;
-use std::path::Path;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, SeekFrom};
-
 use tokio::sync::Mutex;
 
 #[derive(Debug)]
@@ -30,27 +29,25 @@ where
     async fn new(db_name: &str) -> Result<Self> {
         let serializer = SE::default();
         let extension = match serializer.format() {
-            Serializers::Bin(st) => st,
-            Serializers::Json(st) => st,
-            Serializers::Yaml(st) => st,
-            Serializers::Ron(st) => st,
+            Serializers::Bin(st) => st.clone(),
+            Serializers::Json(st) => st.clone(),
+            Serializers::Yaml(st) => st.clone(),
+            Serializers::Ron(st) => st.clone(),
         };
 
-        let db_path = [db_name, extension].concat();
+        let db_path = format!("{}{}", db_name, extension);
+
+        let file = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(&db_path)
+            .await?;
 
         Ok(Self {
             serializer: SE::default(),
-            file_path: db_path.to_owned(),
-            db_file: Mutex::new(
-                OpenOptions::new()
-                    .read(true)
-                    .append(true)
-                    .create(true)
-                    .open(db_path)
-                    .await
-                    .map_err(|_| RedDbErrorKind::StorageInit)
-                    .unwrap(),
-            ),
+            file_path: db_path,
+            db_file: Mutex::new(file),
         })
     }
 
@@ -61,30 +58,30 @@ where
         let mut map: RedDbHM = HashMap::new();
         let mut file = self.db_file.lock().await;
         let reader = BufReader::new(&mut *file);
-
         let mut lines = reader.lines();
 
-        while let Some(line) = lines.next_line().await.unwrap() {
-            let byte_str = &line.into_bytes();
+        while let Some(line) = lines.next_line().await? {
+            let byte_str = line.into_bytes();
             let document: Document<T> = self
                 .serializer
-                .deserialize(byte_str)
-                .map_err(|_| RedDbErrorKind::DataCorruption)
-                .unwrap();
-            let id = document._id;
-            let st = document._st;
-            let data = document.data;
-            let serialized = self.serializer.serialize(&data).unwrap();
-            if let Status::De = st {
-                map.remove(&id);
-            } else {
-                map.entry(id).or_insert_with(|| serialized);
+                .deserialize(&byte_str)
+                .map_err(|e| RedDbError::Deserialize(e.to_string()))?;
+
+            match document._st {
+                Status::De => {
+                    map.remove(&document._id);
+                }
+                _ => {
+                    let serialized = self
+                        .serializer
+                        .serialize(&document.data)
+                        .map_err(|e| RedDbError::Serialize(e.to_string()))?;
+                    map.entry(document._id).or_insert(serialized);
+                }
             }
         }
 
-        self.compact_data::<T>(&map)
-            .await
-            .map_err(|_| RedDbErrorKind::Compact)?;
+        self.compact_data::<T>(&map).await?;
 
         Ok(map)
     }
@@ -93,16 +90,15 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Sync,
     {
-        let serialized: Vec<u8> = data
-            .iter()
-            .flat_map(|doc| self.serializer.serialize::<Document<T>>(doc).unwrap())
-            .collect();
-
-        self.append(&serialized)
-            .await
-            .map_err(|_| RedDbErrorKind::AppendData)?;
-
-        Ok(())
+        let mut serialized = Vec::new();
+        for doc in data {
+            let bytes = self
+                .serializer
+                .serialize::<Document<T>>(doc)
+                .map_err(|e| RedDbError::Serialize(e.to_string()))?;
+            serialized.extend(bytes);
+        }
+        self.append(&serialized).await
     }
 }
 
@@ -114,60 +110,36 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data: Vec<u8> = data
-            .iter()
-            .flat_map(|(id, data)| {
-                let data: T = self
-                    .serializer
-                    .deserialize(&*data)
-                    .map_err(|_| RedDbErrorKind::DataCorruption)
-                    .unwrap();
-
-                self.serializer
-                    .serialize(&Document::new(*id, data, Status::In))
-                    .map_err(|_| RedDbErrorKind::DataCorruption)
-                    .unwrap()
-            })
-            .collect();
-
-        self.flush_data(&self.file_path, &data).await.unwrap();
-
-        Ok(())
+        let mut bytes = Vec::new();
+        for (id, raw) in data {
+            let value: T = self
+                .serializer
+                .deserialize(raw)
+                .map_err(|e| RedDbError::Deserialize(e.to_string()))?;
+            let doc = Document::new(*id, value, Status::In);
+            let serialized = self
+                .serializer
+                .serialize(&doc)
+                .map_err(|e| RedDbError::Serialize(e.to_string()))?;
+            bytes.extend(serialized);
+        }
+        self.flush_data(&self.file_path, &bytes).await
     }
 
-    /*
-    fn storage_exists(&self) -> bool {
-        Path::new(&self.file_path).exists()
-    }*/
-
     async fn flush_data<P: AsRef<Path>>(&self, path: P, data: &[u8]) -> Result<()> {
-        let mut storage = File::create(path)
-            .await
-            .map_err(|_| RedDbErrorKind::DataCorruption)?;
-        storage
-            .set_len(0)
-            .await
-            .map_err(|_| RedDbErrorKind::FlushData)?;
-        storage
-            .seek(SeekFrom::Start(0))
-            .await
-            .map_err(|_| RedDbErrorKind::FlushData)?;
-        storage
-            .write_all(&data)
-            .await
-            .map_err(|_| RedDbErrorKind::FlushData)?;
-        storage
-            .sync_all()
-            .await
-            .map_err(|_| RedDbErrorKind::FlushData)?;
+        let mut file = File::create(path).await?;
+        file.set_len(0).await?;
+        file.seek(SeekFrom::Start(0)).await?;
+        file.write_all(data).await?;
+        file.sync_all().await?;
         Ok(())
     }
 
     async fn append(&self, data: &[u8]) -> Result<()> {
-        let mut storage = self.db_file.lock().await;
-        storage.seek(SeekFrom::End(0)).await.unwrap();
-        storage.write_all(&data).await.unwrap();
-        storage.sync_all().await.unwrap();
+        let mut file = self.db_file.lock().await;
+        file.seek(SeekFrom::End(0)).await?;
+        file.write_all(data).await?;
+        file.sync_all().await?;
         Ok(())
     }
 }
@@ -175,41 +147,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use crate::serializer::RonSerializer;
-    //use crate::Document;
-    //use crate::Uuid;
 
     #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
     struct TestStruct {
         foo: String,
     }
-
-    // #[tokio::test]
-    // async fn persist_and_load_data<'a>() {
-    //     let storage = FileStorage::<RonSerializer>::new("file_persist_test")
-    //         .await
-    //         .unwrap();
-    //     let doc_one = Document::new(
-    //         Uuid::new_v4(),
-    //         TestStruct {
-    //             foo: "one".to_owned(),
-    //         },
-    //         Status::In,
-    //     );
-    //     let doc_two = Document::new(
-    //         Uuid::new_v4(),
-    //         TestStruct {
-    //             foo: "one".to_owned(),
-    //         },
-    //         Status::In,
-    //     );
-    //     let arr_docs = vec![doc_one.clone(), doc_two.clone()];
-    //     let _persisted = storage.persist(&arr_docs).await.unwrap();
-    //     let map: RedDbHM = storage.load::<TestStruct>().await.unwrap();
-    //     let one: TestStruct = storage
-    //         .serializer
-    //         .deserialize(&map.get(&doc_one._id).unwrap())
-    //         .unwrap();
-    //     // assert_eq!(one, doc_one.data);
-    // }
 }
