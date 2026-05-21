@@ -8,20 +8,11 @@ use super::Storage;
 use crate::document::Document;
 use crate::error::{RedDbError, Result};
 use crate::serializer::{Serializer, Serializers};
-use crate::status::Status;
+use crate::wal::{WalEntry, WalOp};
 use crate::RedDbHM;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, SeekFrom};
 use tokio::sync::Mutex;
-
-/// Internal envelope written to the WAL file. Carries operation status
-/// so the storage layer can replay inserts, updates, and deletes on load.
-#[derive(Debug, Serialize, Deserialize)]
-struct StorageDoc<T> {
-    id: uuid::Uuid,
-    data: T,
-    st: Status,
-}
 
 #[derive(Debug)]
 pub struct FileStorage<SE> {
@@ -70,23 +61,17 @@ where
         let mut lines = reader.lines();
 
         while let Some(line) = lines.next_line().await? {
-            let byte_str = line.into_bytes();
-            let entry: StorageDoc<T> = self
+            let bytes = line.into_bytes();
+            let entry: WalEntry = self
                 .serializer
-                .deserialize(&byte_str)
+                .deserialize(&bytes)
                 .map_err(|e| RedDbError::Deserialize(e.to_string()))?;
 
-            match entry.st {
-                Status::De => {
-                    map.remove(&entry.id);
-                }
-                _ => {
-                    let serialized = self
-                        .serializer
-                        .serialize(&entry.data)
-                        .map_err(|e| RedDbError::Serialize(e.to_string()))?;
-                    map.entry(entry.id).or_insert(serialized);
-                }
+            if entry.is_delete() {
+                map.remove(&entry.id);
+            } else {
+                // Always overwrite: Update entries must replace a prior Insert
+                map.insert(entry.id, entry.payload);
             }
         }
 
@@ -95,24 +80,31 @@ where
         Ok(map)
     }
 
-    async fn persist<T>(&self, data: &[Document<T>], status: Status) -> Result<()>
+    async fn persist<T>(&self, data: &[Document<T>], op: WalOp) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Sync + Clone,
     {
-        let mut serialized = Vec::new();
+        let mut bytes = Vec::new();
         for doc in data {
-            let entry = StorageDoc {
-                id: doc.id,
-                data: doc.data.clone(),
-                st: status.clone(),
+            let payload = if op == WalOp::Delete {
+                Vec::new()
+            } else {
+                self.serializer
+                    .serialize(&doc.data)
+                    .map_err(|e| RedDbError::Serialize(e.to_string()))?
             };
-            let bytes = self
+            let entry = match op {
+                WalOp::Insert => WalEntry::insert(doc.id, payload),
+                WalOp::Update => WalEntry::update(doc.id, payload),
+                WalOp::Delete => WalEntry::delete(doc.id),
+            };
+            let serialized = self
                 .serializer
                 .serialize(&entry)
                 .map_err(|e| RedDbError::Serialize(e.to_string()))?;
-            serialized.extend(bytes);
+            bytes.extend(serialized);
         }
-        self.append(&serialized).await
+        self.append(&bytes).await
     }
 }
 
@@ -125,12 +117,8 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         let mut bytes = Vec::new();
-        for (id, raw) in data {
-            let value: T = self
-                .serializer
-                .deserialize(raw)
-                .map_err(|e| RedDbError::Deserialize(e.to_string()))?;
-            let entry = StorageDoc { id: *id, data: value, st: Status::In };
+        for (id, payload) in data {
+            let entry = WalEntry::insert(*id, payload.clone());
             let serialized = self
                 .serializer
                 .serialize(&entry)

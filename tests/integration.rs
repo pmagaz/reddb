@@ -1,117 +1,201 @@
 use reddb::{Document, RonDb};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 struct TestStruct {
     foo: String,
 }
 
+/// Remove the file at `path`, ignoring errors (e.g. does not exist).
+fn cleanup(path: &str) {
+    let _ = fs::remove_file(path);
+}
+
+// ── insert ────────────────────────────────────────────────────────────────────
+
 #[tokio::test]
-async fn insert_one_and_persist() {
-    let db = RonDb::new::<TestStruct>(".insert_one_persist.db").unwrap();
-    let doc: Document<TestStruct> = db
-        .insert_one(TestStruct { foo: "test".to_owned() })
+async fn insert_one_survives_reopen() {
+    let file = ".it_insert_one.ron";
+    cleanup(file);
+
+    let inserted_id = {
+        let db = RonDb::new::<TestStruct>(".it_insert_one").unwrap();
+        let doc = db
+            .insert_one(TestStruct { foo: "persist_me".into() })
+            .await
+            .unwrap();
+        doc.id
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_insert_one").unwrap();
+    let found: Option<Document<TestStruct>> = db2.get(&inserted_id).await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().data.foo, "persist_me");
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn insert_many_survives_reopen() {
+    let file = ".it_insert_many.ron";
+    cleanup(file);
+
+    let ids: Vec<_> = {
+        let db = RonDb::new::<TestStruct>(".it_insert_many").unwrap();
+        db.insert(vec![
+            TestStruct { foo: "alpha".into() },
+            TestStruct { foo: "beta".into() },
+            TestStruct { foo: "gamma".into() },
+        ])
         .await
-        .unwrap();
+        .unwrap()
+        .into_iter()
+        .map(|d| d.id)
+        .collect()
+    };
 
-    let file = File::open(".insert_one_persist.db.ron").unwrap();
-    let buffered = BufReader::new(file);
-
-    for line in buffered.lines() {
-        let bytes = line.unwrap().into_bytes();
-        // The file stores StorageDoc (internal envelope); parse the id and data fields
-        let text = String::from_utf8(bytes).unwrap();
-        assert!(text.contains(&doc.id.to_string()));
-        assert!(text.contains("test"));
+    let db2 = RonDb::new::<TestStruct>(".it_insert_many").unwrap();
+    for id in &ids {
+        assert!(db2.get::<TestStruct>(id).await.unwrap().is_some());
     }
-    fs::remove_file(".insert_one_persist.db.ron").unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 3);
+
+    cleanup(file);
+}
+
+// ── update ────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_one_survives_reopen() {
+    let file = ".it_update_one.ron";
+    cleanup(file);
+
+    let id = {
+        let db = RonDb::new::<TestStruct>(".it_update_one").unwrap();
+        let doc = db
+            .insert_one(TestStruct { foo: "original".into() })
+            .await
+            .unwrap();
+        db.update_one(&doc.id, TestStruct { foo: "updated".into() })
+            .await
+            .unwrap();
+        doc.id
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_update_one").unwrap();
+    let found: Document<TestStruct> = db2.find_one(&id).await.unwrap();
+    assert_eq!(found.data.foo, "updated");
+
+    cleanup(file);
 }
 
 #[tokio::test]
-async fn insert_and_persist() {
-    let db = RonDb::new::<TestStruct>(".insert_persist.db").unwrap();
-    let one = TestStruct { foo: "one".to_owned() };
-    let two = TestStruct { foo: "two".to_owned() };
-    let inserted: Vec<Document<TestStruct>> = db
-        .insert(vec![one.clone(), two.clone()])
+async fn update_many_survives_reopen() {
+    let file = ".it_update_many.ron";
+    cleanup(file);
+
+    let search = TestStruct { foo: "search".into() };
+    let replacement = TestStruct { foo: "replaced".into() };
+
+    {
+        let db = RonDb::new::<TestStruct>(".it_update_many").unwrap();
+        db.insert(vec![
+            search.clone(),
+            search.clone(),
+            TestStruct { foo: "other".into() },
+        ])
         .await
         .unwrap();
+        let n = db.update(&search, &replacement).await.unwrap();
+        assert_eq!(n, 2);
+    }
 
-    let file = File::open(".insert_persist.db.ron").unwrap();
-    let buffered = BufReader::new(file);
-    let lines: Vec<String> = buffered.lines().map(|l| l.unwrap()).collect();
+    let db2 = RonDb::new::<TestStruct>(".it_update_many").unwrap();
+    let replaced = db2.find(&replacement).await.unwrap();
+    assert_eq!(replaced.len(), 2);
+    let untouched = db2.find(&TestStruct { foo: "other".into() }).await.unwrap();
+    assert_eq!(untouched.len(), 1);
 
-    assert_eq!(lines.len(), 2);
-    assert!(lines.iter().any(|l| l.contains("one")));
-    assert!(lines.iter().any(|l| l.contains("two")));
-    assert!(lines.iter().any(|l| l.contains(&inserted[0].id.to_string())));
-    assert!(lines.iter().any(|l| l.contains(&inserted[1].id.to_string())));
+    cleanup(file);
+}
 
-    fs::remove_file(".insert_persist.db.ron").unwrap();
+// ── delete ────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_one_survives_reopen() {
+    let file = ".it_delete_one.ron";
+    cleanup(file);
+
+    let id = {
+        let db = RonDb::new::<TestStruct>(".it_delete_one").unwrap();
+        let doc = db
+            .insert_one(TestStruct { foo: "to_delete".into() })
+            .await
+            .unwrap();
+        db.delete_one::<TestStruct>(&doc.id).await.unwrap();
+        doc.id
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_delete_one").unwrap();
+    let result = db2.get::<TestStruct>(&id).await.unwrap();
+    assert!(result.is_none());
+
+    cleanup(file);
 }
 
 #[tokio::test]
-async fn update_one_and_persist() {
-    let db = RonDb::new::<TestStruct>(".update_one_persist.db").unwrap();
-    let doc: Document<TestStruct> = db
-        .insert_one(TestStruct { foo: "original".to_owned() })
-        .await
-        .unwrap();
+async fn delete_many_survives_reopen() {
+    let file = ".it_delete_many.ron";
+    cleanup(file);
 
-    db.update_one(&doc.id, TestStruct { foo: "updated".to_owned() })
-        .await
-        .unwrap();
+    let target = TestStruct { foo: "remove_me".into() };
+    let keep = TestStruct { foo: "keep_me".into() };
 
-    let result: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
-    assert_eq!(result.data.foo, "updated");
+    {
+        let db = RonDb::new::<TestStruct>(".it_delete_many").unwrap();
+        db.insert(vec![target.clone(), target.clone(), keep.clone()])
+            .await
+            .unwrap();
+        let n = db.delete(&target).await.unwrap();
+        assert_eq!(n, 2);
+    }
 
-    let file = File::open(".update_one_persist.db.ron").unwrap();
-    let buffered = BufReader::new(file);
-    let lines: Vec<String> = buffered.lines().map(|l| l.unwrap()).collect();
-    // After compaction on load there is 1 line; before compaction there are 2
-    // Either way the last occurrence of this id must have "updated"
-    let id_str = doc.id.to_string();
-    let last = lines.iter().filter(|l| l.contains(&id_str)).last().unwrap();
-    assert!(last.contains("updated"));
+    let db2 = RonDb::new::<TestStruct>(".it_delete_many").unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].data.foo, "keep_me");
 
-    fs::remove_file(".update_one_persist.db.ron").unwrap();
+    cleanup(file);
 }
 
-#[tokio::test]
-async fn update_and_persist() {
-    let db = RonDb::new::<TestStruct>(".update_persist.db").unwrap();
-    let one = TestStruct { foo: "search".to_owned() };
-    let two = TestStruct { foo: "other".to_owned() };
-    let updated_val = TestStruct { foo: "updated".to_owned() };
-
-    db.insert(vec![one.clone(), one.clone(), two.clone()])
-        .await
-        .unwrap();
-
-    let num_updated = db.update(&one, &updated_val).await.unwrap();
-    assert_eq!(num_updated, 2);
-
-    let results = db.find(&updated_val).await.unwrap();
-    assert_eq!(results.len(), 2);
-
-    fs::remove_file(".update_persist.db.ron").unwrap();
-}
+// ── compaction ────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn delete_one_persists_removal() {
-    let db = RonDb::new::<TestStruct>(".delete_one_persist.db").unwrap();
-    let doc = db
-        .insert_one(TestStruct { foo: "to_delete".to_owned() })
-        .await
-        .unwrap();
+async fn compaction_produces_correct_state() {
+    let file = ".it_compaction.ron";
+    cleanup(file);
 
-    db.delete_one::<TestStruct>(&doc.id).await.unwrap();
+    {
+        let db = RonDb::new::<TestStruct>(".it_compaction").unwrap();
+        // Three inserts + one delete = net two live docs
+        let a = db
+            .insert_one(TestStruct { foo: "a".into() })
+            .await
+            .unwrap();
+        let _b = db.insert_one(TestStruct { foo: "b".into() }).await.unwrap();
+        let _c = db.insert_one(TestStruct { foo: "c".into() }).await.unwrap();
+        db.delete_one::<TestStruct>(&a.id).await.unwrap();
+    }
 
-    let after = db.get::<TestStruct>(&doc.id).await.unwrap();
-    assert!(after.is_none());
+    // Reopening triggers compaction; final state should have 2 docs
+    let db2 = RonDb::new::<TestStruct>(".it_compaction").unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 2);
+    let foos: Vec<&str> = all.iter().map(|d| d.data.foo.as_str()).collect();
+    assert!(foos.contains(&"b"));
+    assert!(foos.contains(&"c"));
 
-    fs::remove_file(".delete_one_persist.db.ron").unwrap();
+    cleanup(file);
 }

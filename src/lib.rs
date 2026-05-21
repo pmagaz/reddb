@@ -14,15 +14,16 @@ mod error;
 pub mod serializer;
 mod status;
 mod storage;
+mod wal;
 
 pub use config::DbConfig;
 pub use document::Document;
 use error::{RedDbError, Result};
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
-use status::Status;
 pub use storage::FileStorage;
 use storage::Storage;
+use wal::WalOp;
 
 type RedDbHM = HashMap<Uuid, Vec<u8>>;
 
@@ -118,7 +119,7 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
         let doc = self.insert_document(value).await?;
-        self.storage.persist(&[doc.clone()], Status::In).await?;
+        self.storage.persist(&[doc.clone()], WalOp::Insert).await?;
         Ok(doc)
     }
 
@@ -131,7 +132,7 @@ where
             .try_collect()
             .await?;
 
-        self.storage.persist(&docs, Status::In).await?;
+        self.storage.persist(&docs, WalOp::Insert).await?;
         Ok(docs)
     }
 
@@ -164,7 +165,7 @@ where
             let entry = data.get_mut(id).ok_or(RedDbError::NotFound(*id))?;
             *entry = self.serialize(&new_value)?;
             let doc = Document::new(*id, new_value);
-            self.storage.persist(&[doc], Status::Up).await?;
+            self.storage.persist(&[doc], WalOp::Update).await?;
             Ok(true)
         } else {
             Ok(false)
@@ -186,7 +187,7 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
         let doc = self.remove_document(*id).await?;
-        self.storage.persist(&[doc.clone()], Status::De).await?;
+        self.storage.persist(&[doc.clone()], WalOp::Delete).await?;
         Ok(doc)
     }
 
@@ -237,7 +238,7 @@ where
             .collect();
 
         let count = docs.len();
-        self.storage.persist(&docs, Status::Up).await?;
+        self.storage.persist(&docs, WalOp::Update).await?;
         Ok(count)
     }
 
@@ -252,7 +253,7 @@ where
             .try_collect()
             .await?;
 
-        self.storage.persist(&docs, Status::De).await?;
+        self.storage.persist(&docs, WalOp::Delete).await?;
         Ok(docs.len())
     }
 

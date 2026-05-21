@@ -1,6 +1,6 @@
 use crate::document::Document;
 use crate::error::Result;
-use crate::status::Status;
+use crate::wal::WalOp;
 use crate::RedDbHM;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ pub trait Storage {
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync;
 
-    async fn persist<T>(&self, records: &[Document<T>], status: Status) -> Result<()>
+    async fn persist<T>(&self, records: &[Document<T>], op: WalOp) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Send + Sync + Clone;
 }
