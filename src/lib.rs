@@ -8,12 +8,14 @@ use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use uuid::Uuid;
 
+mod config;
 mod document;
 mod error;
 pub mod serializer;
 mod status;
 mod storage;
 
+pub use config::DbConfig;
 pub use document::Document;
 use error::{RedDbError, Result};
 use serde::{Deserialize, Serialize};
@@ -45,14 +47,16 @@ where
     for<'de> SE: Serializer<'de> + Debug,
     for<'de> ST: Storage + Debug + Send + Sync,
 {
-    pub fn new<T>(db_name: &'static str) -> Result<Self>
+    /// Open or create a database using a [`DbConfig`].
+    pub fn open<T>(config: DbConfig) -> Result<Self>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
+        let stem = config.file_stem().to_string_lossy().into_owned();
         let rt = Runtime::new().unwrap();
 
         let (data, storage) = thread::spawn(move || {
-            let storage = rt.block_on(async { ST::new(db_name).await.unwrap() });
+            let storage = rt.block_on(async { ST::new(&stem).await.unwrap() });
             let data = rt.block_on(async { storage.load::<T>().await.unwrap() });
             (data, storage)
         })
@@ -64,6 +68,14 @@ where
             data: Arc::new(RwLock::new(data)),
             serializer: SE::default(),
         })
+    }
+
+    /// Convenience constructor — equivalent to `open(DbConfig::new(name))`.
+    pub fn new<T>(db_name: &'static str) -> Result<Self>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
+    {
+        Self::open::<T>(DbConfig::new(db_name))
     }
 
     async fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
