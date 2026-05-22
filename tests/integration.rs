@@ -20,7 +20,7 @@ async fn insert_one_survives_reopen() {
     cleanup(file);
 
     let inserted_id = {
-        let db = RonDb::new::<TestStruct>(".it_insert_one").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_insert_one").await.unwrap();
         let doc = db
             .insert_one(TestStruct { foo: "persist_me".into() })
             .await
@@ -28,7 +28,7 @@ async fn insert_one_survives_reopen() {
         doc.id
     };
 
-    let db2 = RonDb::new::<TestStruct>(".it_insert_one").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_insert_one").await.unwrap();
     let found: Option<Document<TestStruct>> = db2.get(&inserted_id).await.unwrap();
     assert!(found.is_some());
     assert_eq!(found.unwrap().data.foo, "persist_me");
@@ -42,7 +42,7 @@ async fn insert_many_survives_reopen() {
     cleanup(file);
 
     let ids: Vec<_> = {
-        let db = RonDb::new::<TestStruct>(".it_insert_many").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_insert_many").await.unwrap();
         db.insert(vec![
             TestStruct { foo: "alpha".into() },
             TestStruct { foo: "beta".into() },
@@ -55,7 +55,7 @@ async fn insert_many_survives_reopen() {
         .collect()
     };
 
-    let db2 = RonDb::new::<TestStruct>(".it_insert_many").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_insert_many").await.unwrap();
     for id in &ids {
         assert!(db2.get::<TestStruct>(id).await.unwrap().is_some());
     }
@@ -73,7 +73,7 @@ async fn update_one_survives_reopen() {
     cleanup(file);
 
     let id = {
-        let db = RonDb::new::<TestStruct>(".it_update_one").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_update_one").await.unwrap();
         let doc = db
             .insert_one(TestStruct { foo: "original".into() })
             .await
@@ -84,7 +84,7 @@ async fn update_one_survives_reopen() {
         doc.id
     };
 
-    let db2 = RonDb::new::<TestStruct>(".it_update_one").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_update_one").await.unwrap();
     let found: Document<TestStruct> = db2.find_one(&id).await.unwrap();
     assert_eq!(found.data.foo, "updated");
 
@@ -100,7 +100,7 @@ async fn update_many_survives_reopen() {
     let replacement = TestStruct { foo: "replaced".into() };
 
     {
-        let db = RonDb::new::<TestStruct>(".it_update_many").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_update_many").await.unwrap();
         db.insert(vec![
             search.clone(),
             search.clone(),
@@ -112,7 +112,7 @@ async fn update_many_survives_reopen() {
         assert_eq!(n, 2);
     }
 
-    let db2 = RonDb::new::<TestStruct>(".it_update_many").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_update_many").await.unwrap();
     let replaced = db2.find(&replacement).await.unwrap();
     assert_eq!(replaced.len(), 2);
     let untouched = db2.find(&TestStruct { foo: "other".into() }).await.unwrap();
@@ -129,7 +129,7 @@ async fn delete_one_survives_reopen() {
     cleanup(file);
 
     let id = {
-        let db = RonDb::new::<TestStruct>(".it_delete_one").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_delete_one").await.unwrap();
         let doc = db
             .insert_one(TestStruct { foo: "to_delete".into() })
             .await
@@ -138,7 +138,7 @@ async fn delete_one_survives_reopen() {
         doc.id
     };
 
-    let db2 = RonDb::new::<TestStruct>(".it_delete_one").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_delete_one").await.unwrap();
     let result = db2.get::<TestStruct>(&id).await.unwrap();
     assert!(result.is_none());
 
@@ -154,7 +154,7 @@ async fn delete_many_survives_reopen() {
     let keep = TestStruct { foo: "keep_me".into() };
 
     {
-        let db = RonDb::new::<TestStruct>(".it_delete_many").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_delete_many").await.unwrap();
         db.insert(vec![target.clone(), target.clone(), keep.clone()])
             .await
             .unwrap();
@@ -162,7 +162,7 @@ async fn delete_many_survives_reopen() {
         assert_eq!(n, 2);
     }
 
-    let db2 = RonDb::new::<TestStruct>(".it_delete_many").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_delete_many").await.unwrap();
     let all = db2.find_all::<TestStruct>().await.unwrap();
     assert_eq!(all.len(), 1);
     assert_eq!(all[0].data.foo, "keep_me");
@@ -174,7 +174,7 @@ async fn delete_many_survives_reopen() {
 
 #[tokio::test]
 async fn memdb_basic_crud() {
-    let db = MemDb::new::<TestStruct>("unused").unwrap();
+    let db = MemDb::new::<TestStruct>("unused").await.unwrap();
 
     let doc = db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap();
     let found: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
@@ -194,7 +194,7 @@ async fn memdb_leaves_no_files() {
     let stem = ".it_memdb_no_files";
     let _ = fs::remove_file(format!("{}.bin", stem));
 
-    let db = MemDb::new::<TestStruct>(stem).unwrap();
+    let db = MemDb::new::<TestStruct>(stem).await.unwrap();
     db.insert_one(TestStruct { foo: "ephemeral".into() }).await.unwrap();
     drop(db);
 
@@ -203,11 +203,11 @@ async fn memdb_leaves_no_files() {
 
 #[tokio::test]
 async fn memdb_does_not_persist_across_reopen() {
-    let db1 = MemDb::new::<TestStruct>("memdb_ephemeral").unwrap();
+    let db1 = MemDb::new::<TestStruct>("memdb_ephemeral").await.unwrap();
     db1.insert_one(TestStruct { foo: "gone".into() }).await.unwrap();
     drop(db1);
 
-    let db2 = MemDb::new::<TestStruct>("memdb_ephemeral").unwrap();
+    let db2 = MemDb::new::<TestStruct>("memdb_ephemeral").await.unwrap();
     let all = db2.find_all::<TestStruct>().await.unwrap();
     assert!(all.is_empty());
 }
@@ -220,7 +220,7 @@ async fn compaction_produces_correct_state() {
     cleanup(file);
 
     {
-        let db = RonDb::new::<TestStruct>(".it_compaction").unwrap();
+        let db = RonDb::new::<TestStruct>(".it_compaction").await.unwrap();
         // Three inserts + one delete = net two live docs
         let a = db
             .insert_one(TestStruct { foo: "a".into() })
@@ -232,7 +232,7 @@ async fn compaction_produces_correct_state() {
     }
 
     // Reopening triggers compaction; final state should have 2 docs
-    let db2 = RonDb::new::<TestStruct>(".it_compaction").unwrap();
+    let db2 = RonDb::new::<TestStruct>(".it_compaction").await.unwrap();
     let all = db2.find_all::<TestStruct>().await.unwrap();
     assert_eq!(all.len(), 2);
     let foos: Vec<&str> = all.iter().map(|d| d.data.foo.as_str()).collect();

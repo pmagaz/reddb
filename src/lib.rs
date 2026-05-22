@@ -3,8 +3,6 @@ use futures::TryStreamExt;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::thread;
-use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use uuid::Uuid;
 
@@ -12,7 +10,6 @@ mod config;
 mod document;
 mod error;
 pub mod serializer;
-mod status;
 mod storage;
 mod wal;
 
@@ -49,27 +46,19 @@ pub struct RedDb<SE, ST> {
     data: Arc<RwLock<RedDbHM>>,
 }
 
-impl<'a, SE, ST: 'static> RedDb<SE, ST>
+impl<SE, ST: 'static> RedDb<SE, ST>
 where
     SE: Serializer + Debug,
     for<'de> ST: Storage + Debug + Send + Sync,
 {
     /// Open or create a database using a [`DbConfig`].
-    pub fn open<T>(config: DbConfig) -> Result<Self>
+    pub async fn open<T>(config: DbConfig) -> Result<Self>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
         let stem = config.file_stem().to_string_lossy().into_owned();
-        let rt = Runtime::new().unwrap();
-
-        let (data, storage) = thread::spawn(move || {
-            let storage = rt.block_on(async { ST::new(&stem).await.unwrap() });
-            let data = rt.block_on(async { storage.load::<T>().await.unwrap() });
-            (data, storage)
-        })
-        .join()
-        .map_err(|_| RedDbError::PersistFailed("initialization failed".into()))?;
-
+        let storage = ST::new(&stem).await?;
+        let data = storage.load::<T>().await?;
         Ok(Self {
             storage,
             data: Arc::new(RwLock::new(data)),
@@ -77,19 +66,19 @@ where
         })
     }
 
-    /// Convenience constructor — equivalent to `open(DbConfig::new(name))`.
-    pub fn new<T>(db_name: &'static str) -> Result<Self>
+    /// Convenience constructor — equivalent to `open(DbConfig::new(name)).await`.
+    pub async fn new<T>(db_name: &str) -> Result<Self>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        Self::open::<T>(DbConfig::new(db_name))
+        Self::open::<T>(DbConfig::new(db_name)).await
     }
 
-    async fn read(&'a self) -> Result<RwLockReadGuard<'a, RedDbHM>> {
+    async fn read(&self) -> Result<RwLockReadGuard<'_, RedDbHM>> {
         Ok(self.data.read().await)
     }
 
-    async fn write(&'a self) -> Result<RwLockWriteGuard<'a, RedDbHM>> {
+    async fn write(&self) -> Result<RwLockWriteGuard<'_, RedDbHM>> {
         Ok(self.data.write().await)
     }
 
@@ -161,7 +150,7 @@ where
         self.get(id).await?.ok_or(RedDbError::NotFound(*id))
     }
 
-    pub async fn update_one<T>(&'a self, id: &Uuid, new_value: T) -> Result<bool>
+    pub async fn update_one<T>(&self, id: &Uuid, new_value: T) -> Result<bool>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
@@ -296,7 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_document() {
-        let db = RonDb::new::<TestStruct>(".test.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".test.db").await.unwrap();
         let doc: Document<TestStruct> = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let find: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
         assert_eq!(find.data, doc.data);
@@ -304,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_uuids() {
-        let db = RonDb::new::<TestStruct>(".test2.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".test2.db").await.unwrap();
         let doc = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let doc2 = db.insert_document(TestStruct { foo: "test2".to_owned() }).await.unwrap();
         let doc3 = db.insert_document(TestStruct { foo: "test".to_owned() }).await.unwrap();
@@ -320,7 +309,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_and_find_one() {
-        let db = RonDb::new::<TestStruct>(".insert_and_find_one.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".insert_and_find_one.db").await.unwrap();
         let doc = db.insert_one(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let find: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
         assert_eq!(find.id, doc.id);
@@ -330,7 +319,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_returns_some_for_existing() {
-        let db = RonDb::new::<TestStruct>(".get_existing.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".get_existing.db").await.unwrap();
         let doc = db.insert_one(TestStruct { foo: "hello".to_owned() }).await.unwrap();
         let found: Option<Document<TestStruct>> = db.get(&doc.id).await.unwrap();
         assert!(found.is_some());
@@ -340,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_returns_none_for_missing() {
-        let db = RonDb::new::<TestStruct>(".get_missing.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".get_missing.db").await.unwrap();
         let result: Option<Document<TestStruct>> = db.get(&Uuid::new_v4()).await.unwrap();
         assert!(result.is_none());
         fs::remove_file(".get_missing.db.ron").unwrap();
@@ -348,7 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn find() {
-        let db = RonDb::new::<TestStruct>(".find.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".find.db").await.unwrap();
         let one = TestStruct { foo: String::from("one") };
         let two = TestStruct { foo: String::from("two") };
         db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
@@ -359,7 +348,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_one() {
-        let db = RonDb::new::<TestStruct>(".update_one.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".update_one.db").await.unwrap();
         let original = TestStruct { foo: "hi".to_owned() };
         let updated = TestStruct { foo: "bye".to_owned() };
         let doc = db.insert_one(original.clone()).await.unwrap();
@@ -371,7 +360,7 @@ mod tests {
 
     #[tokio::test]
     async fn update() {
-        let db = RonDb::new::<TestStruct>(".update.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".update.db").await.unwrap();
         let one = TestStruct { foo: String::from("one") };
         let two = TestStruct { foo: String::from("two") };
         db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
@@ -384,7 +373,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_one_removes_document() {
-        let db = RonDb::new::<TestStruct>(".delete_one.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".delete_one.db").await.unwrap();
         let doc = db.insert_one(TestStruct { foo: "test".to_owned() }).await.unwrap();
         let deleted: Document<TestStruct> = db.delete_one(&doc.id).await.unwrap();
         assert_eq!(deleted.id, doc.id);
@@ -396,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let db = RonDb::new::<TestStruct>(".delete.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".delete.db").await.unwrap();
         let one = TestStruct { foo: "one".to_owned() };
         let two = TestStruct { foo: "two".to_owned() };
         db.insert(vec![one.clone(), one.clone(), two.clone()]).await.unwrap();
@@ -409,7 +398,7 @@ mod tests {
 
     #[tokio::test]
     async fn serialie_deserialize() {
-        let db = RonDb::new::<TestStruct>(".serialize.db").unwrap();
+        let db = RonDb::new::<TestStruct>(".serialize.db").await.unwrap();
         let test = TestStruct { foo: "one".to_owned() };
         let serialized = db.serializer.serialize(&test).unwrap();
         let deserialized: TestStruct = db.serializer.deserialize(&serialized).unwrap();
