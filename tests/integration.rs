@@ -1,4 +1,4 @@
-use reddb::{Document, RonDb};
+use reddb::{Document, MemDb, RonDb};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -168,6 +168,48 @@ async fn delete_many_survives_reopen() {
     assert_eq!(all[0].data.foo, "keep_me");
 
     cleanup(file);
+}
+
+// ── MemDb ─────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn memdb_basic_crud() {
+    let db = MemDb::new::<TestStruct>("unused").unwrap();
+
+    let doc = db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap();
+    let found: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
+    assert_eq!(found.data.foo, "hello");
+
+    db.update_one(&doc.id, TestStruct { foo: "world".into() }).await.unwrap();
+    let updated: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
+    assert_eq!(updated.data.foo, "world");
+
+    let deleted: Document<TestStruct> = db.delete_one(&doc.id).await.unwrap();
+    assert_eq!(deleted.id, doc.id);
+    assert!(db.get::<TestStruct>(&doc.id).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn memdb_leaves_no_files() {
+    let stem = ".it_memdb_no_files";
+    let _ = fs::remove_file(format!("{}.bin", stem));
+
+    let db = MemDb::new::<TestStruct>(stem).unwrap();
+    db.insert_one(TestStruct { foo: "ephemeral".into() }).await.unwrap();
+    drop(db);
+
+    assert!(!std::path::Path::new(&format!("{}.bin", stem)).exists());
+}
+
+#[tokio::test]
+async fn memdb_does_not_persist_across_reopen() {
+    let db1 = MemDb::new::<TestStruct>("memdb_ephemeral").unwrap();
+    db1.insert_one(TestStruct { foo: "gone".into() }).await.unwrap();
+    drop(db1);
+
+    let db2 = MemDb::new::<TestStruct>("memdb_ephemeral").unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert!(all.is_empty());
 }
 
 // ── compaction ────────────────────────────────────────────────────────────────

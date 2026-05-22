@@ -6,8 +6,10 @@ use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 mod file;
+mod mem;
 
 pub use file::FileStorage;
+pub use mem::MemStorage;
 
 #[async_trait::async_trait]
 pub trait Storage {

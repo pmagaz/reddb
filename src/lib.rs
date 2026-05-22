@@ -22,6 +22,7 @@ use error::{RedDbError, Result};
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
 pub use storage::FileStorage;
+pub use storage::MemStorage;
 use storage::Storage;
 use wal::WalOp;
 
@@ -35,6 +36,11 @@ pub type JsonDb = RedDb<serializer::Json, FileStorage<serializer::Json>>;
 pub type YamlDb = RedDb<serializer::Yaml, FileStorage<serializer::Yaml>>;
 #[cfg(feature = "ron_ser")]
 pub type RonDb = RedDb<serializer::Ron, FileStorage<serializer::Ron>>;
+
+/// All-in-memory database with no file persistence. Uses the Bin serializer
+/// for the internal byte representation; the format does not affect behaviour.
+#[cfg(feature = "bin_ser")]
+pub type MemDb = RedDb<serializer::Bin, MemStorage>;
 
 #[derive(Debug)]
 pub struct RedDb<SE, ST> {
