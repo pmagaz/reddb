@@ -356,6 +356,34 @@ async fn update_where_returning_gives_new_state() {
     cleanup(file);
 }
 
+// ── delete_where ──────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_where_survives_reopen() {
+    let file = ".it_delete_where.ron";
+    cleanup(file);
+
+    {
+        let db = RonDb::new::<TestStruct>(".it_delete_where").await.unwrap();
+        db.insert(vec![
+            TestStruct { foo: "remove".into() },
+            TestStruct { foo: "remove".into() },
+            TestStruct { foo: "keep".into() },
+        ])
+        .await
+        .unwrap();
+        let n = db.delete_where::<TestStruct, _>(|t| t.foo == "remove").await.unwrap();
+        assert_eq!(n, 2);
+    }
+
+    let db2 = RonDb::new::<TestStruct>(".it_delete_where").await.unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].data.foo, "keep");
+
+    cleanup(file);
+}
+
 // ── compaction ────────────────────────────────────────────────────────────────
 
 #[tokio::test]

@@ -133,6 +133,45 @@ where
         UpdateWhereBuilder::new(self, predicate)
     }
 
+    /// Delete all documents whose data satisfies `predicate`.
+    ///
+    /// Returns the count of deleted documents.
+    pub async fn delete_where<T, F>(&self, predicate: F) -> Result<usize>
+    where
+        F: Fn(&T) -> bool + Send + Sync,
+        for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
+    {
+        let deleted: Vec<Document<T>> = {
+            let mut data = self.write().await?;
+
+            // First pass: find matching (id, raw) pairs under immutable iteration.
+            let matches: Vec<(Uuid, Vec<u8>)> = data
+                .iter()
+                .filter_map(|(id, raw)| {
+                    self.deserialize::<T>(raw)
+                        .ok()
+                        .filter(|v| predicate(v))
+                        .map(|_| (*id, raw.clone()))
+                })
+                .collect();
+
+            // Second pass: remove from map and build Document objects.
+            matches
+                .into_iter()
+                .map(|(id, raw)| {
+                    data.remove(&id);
+                    Document::new(id, self.deserialize::<T>(&raw).unwrap())
+                })
+                .collect()
+        };
+
+        let count = deleted.len();
+        if count > 0 {
+            self.storage.persist(&deleted, WalOp::Delete).await?;
+        }
+        Ok(count)
+    }
+
     async fn find_uuids<T>(&self, search: &T) -> Result<Vec<Uuid>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
@@ -319,6 +358,58 @@ where
         self.serializer
             .deserialize(value)
             .map_err(|e| RedDbError::Deserialize(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "bin_ser")]
+mod delete_where_tests {
+    use super::*;
+    use crate::MemDb;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct Item {
+        tag: String,
+    }
+
+    #[tokio::test]
+    async fn deletes_matching_documents() {
+        let db = MemDb::new::<Item>("_").await.unwrap();
+        db.insert(vec![
+            Item { tag: "remove".into() },
+            Item { tag: "remove".into() },
+            Item { tag: "keep".into() },
+        ])
+        .await
+        .unwrap();
+
+        let n = db.delete_where::<Item, _>(|i| i.tag == "remove").await.unwrap();
+        assert_eq!(n, 2);
+
+        let all = db.find_all::<Item>().await.unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].data.tag, "keep");
+    }
+
+    #[tokio::test]
+    async fn returns_zero_when_no_match() {
+        let db = MemDb::new::<Item>("_").await.unwrap();
+        db.insert_one(Item { tag: "keep".into() }).await.unwrap();
+        let n = db.delete_where::<Item, _>(|i| i.tag == "gone").await.unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(db.find_all::<Item>().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn delete_all_when_predicate_always_true() {
+        let db = MemDb::new::<Item>("_").await.unwrap();
+        db.insert(vec![Item { tag: "a".into() }, Item { tag: "b".into() }])
+            .await
+            .unwrap();
+        let n = db.delete_where::<Item, _>(|_| true).await.unwrap();
+        assert_eq!(n, 2);
+        assert!(db.find_all::<Item>().await.unwrap().is_empty());
     }
 }
 
