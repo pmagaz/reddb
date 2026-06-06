@@ -300,6 +300,62 @@ async fn query_count_and_ids() {
     cleanup(file);
 }
 
+// ── update_where ──────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_where_exec_survives_reopen() {
+    let file = ".it_update_where.ron";
+    cleanup(file);
+
+    {
+        let db = RonDb::new::<TestStruct>(".it_update_where").await.unwrap();
+        db.insert(vec![
+            TestStruct { foo: "change_me".into() },
+            TestStruct { foo: "change_me".into() },
+            TestStruct { foo: "keep".into() },
+        ])
+        .await
+        .unwrap();
+        let n = db
+            .update_where::<TestStruct, _>(|t| t.foo == "change_me")
+            .exec(|mut t| { t.foo = "changed".into(); t })
+            .await
+            .unwrap();
+        assert_eq!(n, 2);
+    }
+
+    let db2 = RonDb::new::<TestStruct>(".it_update_where").await.unwrap();
+    let changed = db2.query::<TestStruct>().filter(|t| t.foo == "changed").count().await.unwrap();
+    let kept = db2.query::<TestStruct>().filter(|t| t.foo == "keep").count().await.unwrap();
+    assert_eq!(changed, 2);
+    assert_eq!(kept, 1);
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn update_where_returning_gives_new_state() {
+    let file = ".it_update_where_ret.ron";
+    cleanup(file);
+
+    let db = RonDb::new::<TestStruct>(".it_update_where_ret").await.unwrap();
+    db.insert_one(TestStruct { foo: "before".into() }).await.unwrap();
+
+    let docs = db
+        .update_where::<TestStruct, _>(|t| t.foo == "before")
+        .returning(|mut t| { t.foo = "after".into(); t })
+        .await
+        .unwrap();
+
+    assert_eq!(docs.len(), 1);
+    assert_eq!(docs[0].data.foo, "after");
+
+    let found = db.find_one::<TestStruct>(&docs[0].id).await.unwrap();
+    assert_eq!(found.data.foo, "after");
+
+    cleanup(file);
+}
+
 // ── compaction ────────────────────────────────────────────────────────────────
 
 #[tokio::test]

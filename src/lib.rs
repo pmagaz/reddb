@@ -12,12 +12,14 @@ mod error;
 mod query;
 pub mod serializer;
 mod storage;
+mod update;
 mod wal;
 
 pub use config::DbConfig;
 pub use document::Document;
 use error::{RedDbError, Result};
 pub use query::QueryBuilder;
+pub use update::UpdateWhereBuilder;
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
 pub use storage::FileStorage;
@@ -81,6 +83,11 @@ where
         Ok(self.data.read().await)
     }
 
+    /// Acquire an exclusive write lock on the in-memory store.
+    pub(crate) async fn write_lock(&self) -> Result<RwLockWriteGuard<'_, RedDbHM>> {
+        Ok(self.data.write().await)
+    }
+
     async fn write(&self) -> Result<RwLockWriteGuard<'_, RedDbHM>> {
         Ok(self.data.write().await)
     }
@@ -93,12 +100,37 @@ where
         self.deserialize(raw)
     }
 
+    /// Serialize `value` into the raw bytes format used by the in-memory map.
+    pub(crate) fn serialize_raw<T>(&self, value: &T) -> Result<Vec<u8>>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
+        self.serialize(value)
+    }
+
+    /// Persist a batch of documents via the storage backend.
+    pub(crate) async fn storage_persist<T>(&self, docs: &[Document<T>], op: WalOp) -> Result<()>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + Send + Sync,
+    {
+        self.storage.persist(docs, op).await
+    }
+
     /// Return a [`QueryBuilder`] for closure-based queries over this database.
     pub fn query<T>(&self) -> QueryBuilder<'_, T, SE, ST>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         QueryBuilder::new(self)
+    }
+
+    /// Return an [`UpdateWhereBuilder`] targeting documents that satisfy `predicate`.
+    pub fn update_where<T, F>(&self, predicate: F) -> UpdateWhereBuilder<'_, T, F, SE, ST>
+    where
+        F: Fn(&T) -> bool + Send + Sync + 'static,
+        for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
+    {
+        UpdateWhereBuilder::new(self, predicate)
     }
 
     async fn find_uuids<T>(&self, search: &T) -> Result<Vec<Uuid>>
