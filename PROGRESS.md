@@ -28,10 +28,9 @@
 
 | # | Task | Tests | Status | Commit |
 |---|------|-------|--------|--------|
-| 2.1 | `QueryBuilder` — `.filter()`, `.limit()`, `.skip()`, `.order_by()` | unit + integration | ⬜ | — |
-| 2.2 | `.all()`, `.first()`, `.count()`, `.ids()` terminals | unit + integration | ⬜ | — |
-| 2.3 | `UpdateWhereBuilder` — `.with()` mutator, `.exec()`, `.returning()` | unit + integration | ⬜ | — |
-| 2.4 | `delete_where(predicate)` | unit + integration | ⬜ | — |
+| 2.1+2.2 | `QueryBuilder` — `.filter()`, `.order_by()`, `.skip()`, `.limit()`, `.all()`, `.first()`, `.count()`, `.ids()` | unit + integration | ✅ | `40ac0d5` |
+| 2.3 | `UpdateWhereBuilder` — `.limit()`, `.exec()`, `.returning()` | unit + integration | ✅ | `3363dee` |
+| 2.4 | `delete_where(predicate)` | unit + integration | ✅ | `8ca3435` |
 
 ---
 
