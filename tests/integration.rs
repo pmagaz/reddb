@@ -212,6 +212,94 @@ async fn memdb_does_not_persist_across_reopen() {
     assert!(all.is_empty());
 }
 
+// ── query ─────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn query_filter_survives_reopen() {
+    let file = ".it_query_filter.ron";
+    cleanup(file);
+
+    {
+        let db = RonDb::new::<TestStruct>(".it_query_filter").await.unwrap();
+        db.insert(vec![
+            TestStruct { foo: "keep".into() },
+            TestStruct { foo: "keep".into() },
+            TestStruct { foo: "drop".into() },
+        ])
+        .await
+        .unwrap();
+    }
+
+    let db2 = RonDb::new::<TestStruct>(".it_query_filter").await.unwrap();
+    let results = db2
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "keep")
+        .all()
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn query_order_limit_skip() {
+    let file = ".it_query_chain.ron";
+    cleanup(file);
+
+    {
+        let db = RonDb::new::<TestStruct>(".it_query_chain").await.unwrap();
+        db.insert(vec![
+            TestStruct { foo: "c".into() },
+            TestStruct { foo: "a".into() },
+            TestStruct { foo: "b".into() },
+            TestStruct { foo: "d".into() },
+        ])
+        .await
+        .unwrap();
+    }
+
+    let db2 = RonDb::new::<TestStruct>(".it_query_chain").await.unwrap();
+    // sorted asc, skip first, take 2 → "b", "c"
+    let results = db2
+        .query::<TestStruct>()
+        .order_by(|a, b| a.foo.cmp(&b.foo))
+        .skip(1)
+        .limit(2)
+        .all()
+        .await
+        .unwrap();
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].data.foo, "b");
+    assert_eq!(results[1].data.foo, "c");
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn query_count_and_ids() {
+    let file = ".it_query_count.ron";
+    cleanup(file);
+
+    let db = RonDb::new::<TestStruct>(".it_query_count").await.unwrap();
+    db.insert(vec![
+        TestStruct { foo: "yes".into() },
+        TestStruct { foo: "yes".into() },
+        TestStruct { foo: "no".into() },
+    ])
+    .await
+    .unwrap();
+
+    let count = db.query::<TestStruct>().filter(|t| t.foo == "yes").count().await.unwrap();
+    assert_eq!(count, 2);
+
+    let ids = db.query::<TestStruct>().filter(|t| t.foo == "yes").ids().await.unwrap();
+    assert_eq!(ids.len(), 2);
+
+    cleanup(file);
+}
+
 // ── compaction ────────────────────────────────────────────────────────────────
 
 #[tokio::test]

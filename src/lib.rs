@@ -9,6 +9,7 @@ pub use uuid::Uuid;
 mod config;
 mod document;
 mod error;
+mod query;
 pub mod serializer;
 mod storage;
 mod wal;
@@ -16,6 +17,7 @@ mod wal;
 pub use config::DbConfig;
 pub use document::Document;
 use error::{RedDbError, Result};
+pub use query::QueryBuilder;
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
 pub use storage::FileStorage;
@@ -74,7 +76,8 @@ where
         Self::open::<T>(DbConfig::new(db_name)).await
     }
 
-    async fn read(&self) -> Result<RwLockReadGuard<'_, RedDbHM>> {
+    /// Acquire a shared read lock on the in-memory store.
+    pub(crate) async fn read_lock(&self) -> Result<RwLockReadGuard<'_, RedDbHM>> {
         Ok(self.data.read().await)
     }
 
@@ -82,11 +85,27 @@ where
         Ok(self.data.write().await)
     }
 
+    /// Deserialize raw bytes stored in the in-memory map back into `T`.
+    pub(crate) fn deserialize_raw<T>(&self, raw: &[u8]) -> Result<T>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
+        self.deserialize(raw)
+    }
+
+    /// Return a [`QueryBuilder`] for closure-based queries over this database.
+    pub fn query<T>(&self) -> QueryBuilder<'_, T, SE, ST>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
+        QueryBuilder::new(self)
+    }
+
     async fn find_uuids<T>(&self, search: &T) -> Result<Vec<Uuid>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self.read().await?;
+        let data = self.read_lock().await?;
         let serialized = self.serialize(search)?;
 
         let uuids = data
@@ -135,7 +154,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self.read().await?;
+        let data = self.read_lock().await?;
         match data.get(id) {
             Some(raw) => Ok(Some(Document::new(*id, self.deserialize(raw)?))),
             None => Ok(None),
@@ -190,7 +209,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self.read().await?;
+        let data = self.read_lock().await?;
 
         let docs = data
             .iter()
@@ -204,7 +223,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
-        let data = self.read().await?;
+        let data = self.read_lock().await?;
         let serialized = self.serialize(search)?;
 
         let docs = data
