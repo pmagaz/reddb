@@ -52,3 +52,8 @@ full     = ["bin_ser", "json_ser", "ron_ser", "yaml_ser"]
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile   = "3"
+criterion  = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name    = "basic"
+harness = false

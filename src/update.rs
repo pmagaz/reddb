@@ -64,46 +64,50 @@ where
         G: Fn(T) -> T + Send + Sync,
     {
         if self.db.write_order == WriteOrder::FileFirst {
-            // Collect matches and build transformed documents under read lock.
-            let updates: Vec<(crate::Uuid, Vec<u8>, T)> = {
+            // Collect matches under read lock, build transformed documents.
+            let updates: Vec<(crate::Uuid, Vec<u8>, Vec<u8>, T)> = {
                 let data = self.db.read_lock().await?;
                 let mut updates = Vec::new();
-                for (id, raw) in data.iter() {
+                for (id, old_raw) in data.iter() {
                     if let Some(ref lim) = self.limit {
                         if updates.len() >= *lim {
                             break;
                         }
                     }
-                    let value: T = self.db.deserialize_raw(raw)?;
+                    let value: T = self.db.deserialize_raw(old_raw)?;
                     if (self.predicate)(&value) {
                         let new_value = transform(value);
                         let new_raw = self.db.serialize_raw(&new_value)?;
-                        updates.push((*id, new_raw, new_value));
+                        updates.push((*id, old_raw.clone(), new_raw, new_value));
                     }
                 }
                 updates
             };
 
             let docs: Vec<Document<T>> = updates.iter()
-                .map(|(id, _, v)| Document::new(*id, v.clone()))
+                .map(|(id, _, _, v)| Document::new(*id, v.clone()))
                 .collect();
 
             if !docs.is_empty() {
                 self.db.storage_persist(&docs, WalOp::Update).await?;
-                let mut data = self.db.write_lock().await?;
-                for (id, raw, _) in updates {
-                    if let Some(entry) = data.get_mut(&id) {
-                        *entry = raw;
+                {
+                    let mut data = self.db.write_lock().await?;
+                    for (id, _, new_raw, _) in &updates {
+                        if let Some(entry) = data.get_mut(id) {
+                            *entry = new_raw.clone();
+                        }
                     }
+                }
+                for (id, old_raw, new_raw, _) in &updates {
+                    self.db.index_on_update(*id, old_raw, new_raw).await;
                 }
             }
 
             Ok(docs)
         } else {
-            // MemoryFirst: update in-memory first under write lock, then persist.
-            let updated: Vec<Document<T>> = {
+            // MemoryFirst: update in-memory under write lock, then persist.
+            let updated: Vec<(crate::Uuid, Vec<u8>, Vec<u8>, T)> = {
                 let mut data = self.db.write_lock().await?;
-
                 let mut updated = Vec::new();
                 for (id, raw) in data.iter_mut() {
                     if let Some(ref lim) = self.limit {
@@ -114,18 +118,26 @@ where
                     let value: T = self.db.deserialize_raw(raw)?;
                     if (self.predicate)(&value) {
                         let new_value = transform(value);
+                        let old_raw = raw.clone();
                         *raw = self.db.serialize_raw(&new_value)?;
-                        updated.push(Document::new(*id, new_value));
+                        updated.push((*id, old_raw, raw.clone(), new_value));
                     }
                 }
                 updated
             };
 
-            if !updated.is_empty() {
-                self.db.storage_persist(&updated, WalOp::Update).await?;
+            let docs: Vec<Document<T>> = updated.iter()
+                .map(|(id, _, _, v)| Document::new(*id, v.clone()))
+                .collect();
+
+            if !docs.is_empty() {
+                self.db.storage_persist(&docs, WalOp::Update).await?;
+                for (id, old_raw, new_raw, _) in &updated {
+                    self.db.index_on_update(*id, old_raw, new_raw).await;
+                }
             }
 
-            Ok(updated)
+            Ok(docs)
         }
     }
 }

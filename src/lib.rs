@@ -7,16 +7,20 @@ pub use uuid::Uuid;
 mod config;
 mod document;
 mod error;
+mod index;
 mod query;
 pub mod serializer;
 mod storage;
+mod transaction;
 mod update;
 mod wal;
 
 pub use config::{DbConfig, WriteOrder};
 pub use document::Document;
 use error::{RedDbError, Result};
+use index::IndexRegistry;
 pub use query::QueryBuilder;
+pub use transaction::Transaction;
 pub use update::UpdateWhereBuilder;
 use serde::{Deserialize, Serialize};
 use serializer::Serializer;
@@ -52,13 +56,24 @@ pub struct StorageStats {
     pub compaction_ratio: f64,
 }
 
-#[derive(Debug)]
 pub struct RedDb<SE, ST> {
     storage: ST,
     serializer: SE,
     data: Arc<RwLock<RedDbHM>>,
     pub(crate) write_order: WriteOrder,
     compaction_ratio: f64,
+    pub(crate) indexes: Arc<RwLock<IndexRegistry>>,
+}
+
+impl<SE: Debug, ST: Debug> Debug for RedDb<SE, ST> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedDb")
+            .field("storage", &self.storage)
+            .field("serializer", &self.serializer)
+            .field("write_order", &self.write_order)
+            .field("compaction_ratio", &self.compaction_ratio)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<SE, ST: 'static> RedDb<SE, ST>
@@ -80,6 +95,7 @@ where
             serializer: SE::default(),
             write_order: config.write_order,
             compaction_ratio: config.compaction_ratio,
+            indexes: Arc::new(RwLock::new(IndexRegistry::new())),
         })
     }
 
@@ -91,17 +107,18 @@ where
         Self::open::<T>(DbConfig::new(db_name)).await
     }
 
-    /// Acquire a shared read lock on the in-memory store.
+    // ── lock helpers ──────────────────────────────────────────────────────────
+
     pub(crate) async fn read_lock(&self) -> Result<RwLockReadGuard<'_, RedDbHM>> {
         Ok(self.data.read().await)
     }
 
-    /// Acquire an exclusive write lock on the in-memory store.
     pub(crate) async fn write_lock(&self) -> Result<RwLockWriteGuard<'_, RedDbHM>> {
         Ok(self.data.write().await)
     }
 
-    /// Deserialize raw bytes stored in the in-memory map back into `T`.
+    // ── serialization helpers ─────────────────────────────────────────────────
+
     pub(crate) fn deserialize_raw<T>(&self, raw: &[u8]) -> Result<T>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
@@ -109,7 +126,6 @@ where
         self.deserialize(raw)
     }
 
-    /// Serialize `value` into the raw bytes format used by the in-memory map.
     pub(crate) fn serialize_raw<T>(&self, value: &T) -> Result<Vec<u8>>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
@@ -117,13 +133,43 @@ where
         self.serialize(value)
     }
 
-    /// Persist a batch of documents via the storage backend.
+    // ── storage helpers ───────────────────────────────────────────────────────
+
     pub(crate) async fn storage_persist<T>(&self, docs: &[Document<T>], op: WalOp) -> Result<()>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + Send + Sync,
     {
         self.storage.persist(docs, op).await
     }
+
+    pub(crate) async fn storage_persist_raw(&self, ops: &[(WalOp, Uuid, Vec<u8>)]) -> Result<()> {
+        self.storage.persist_raw(ops).await
+    }
+
+    // ── index helpers ─────────────────────────────────────────────────────────
+
+    pub(crate) async fn index_on_insert(&self, id: Uuid, raw: &[u8]) {
+        let mut reg = self.indexes.write().await;
+        if !reg.entries.is_empty() {
+            reg.on_insert(id, raw);
+        }
+    }
+
+    pub(crate) async fn index_on_delete(&self, id: Uuid, raw: &[u8]) {
+        let mut reg = self.indexes.write().await;
+        if !reg.entries.is_empty() {
+            reg.on_delete(id, raw);
+        }
+    }
+
+    pub(crate) async fn index_on_update(&self, id: Uuid, old_raw: &[u8], new_raw: &[u8]) {
+        let mut reg = self.indexes.write().await;
+        if !reg.entries.is_empty() {
+            reg.on_update(id, old_raw, new_raw);
+        }
+    }
+
+    // ── public API ────────────────────────────────────────────────────────────
 
     /// Return a [`QueryBuilder`] for closure-based queries over this database.
     pub fn query<T>(&self) -> QueryBuilder<'_, T, SE, ST>
@@ -140,6 +186,76 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
         UpdateWhereBuilder::new(self, predicate)
+    }
+
+    /// Start a new [`Transaction`]. Stage operations on the returned value, then
+    /// call `commit()` to apply them atomically or `rollback()` to discard them.
+    pub fn begin(&self) -> Transaction<'_, SE, ST> {
+        Transaction::new(self)
+    }
+
+    /// Register a hash index named `name` over the string key extracted by `key_fn`.
+    ///
+    /// Scans all existing documents to build the initial index. After this call,
+    /// every write operation keeps the index up to date automatically.
+    pub async fn add_index<T, F>(&self, name: impl Into<String>, key_fn: F) -> Result<()>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+        F: Fn(&T) -> String + Send + Sync + 'static,
+    {
+        use index::IndexEntry;
+
+        let extractor: index::ExtractorFn = Box::new(move |raw| {
+            let ser = SE::default();
+            ser.deserialize::<T>(raw)
+                .ok()
+                .map(|v| key_fn(&v))
+        });
+
+        let initial_keys = {
+            let data = self.read_lock().await?;
+            let mut keys = std::collections::HashMap::new();
+            for (id, raw) in data.iter() {
+                if let Some(key) = extractor(raw) {
+                    keys.entry(key).or_insert_with(Vec::new).push(*id);
+                }
+            }
+            keys
+        };
+
+        self.indexes.write().await.entries.insert(
+            name.into(),
+            IndexEntry {
+                extractor,
+                keys: initial_keys,
+            },
+        );
+        Ok(())
+    }
+
+    /// Look up documents by the value of a registered index.
+    ///
+    /// Returns an error if no index with the given name exists.
+    pub async fn using_index<T>(&self, index_name: &str, key: &str) -> Result<Vec<Document<T>>>
+    where
+        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
+    {
+        let ids: Vec<Uuid> = {
+            let reg = self.indexes.read().await;
+            let entry = reg.entries.get(index_name)
+                .ok_or_else(|| RedDbError::IndexNotFound(index_name.to_string()))?;
+            entry.keys.get(key).cloned().unwrap_or_default()
+        };
+
+        let data = self.read_lock().await?;
+        let docs = ids.iter()
+            .filter_map(|id| {
+                data.get(id).and_then(|raw| {
+                    self.deserialize::<T>(raw).ok().map(|v| Document::new(*id, v))
+                })
+            })
+            .collect();
+        Ok(docs)
     }
 
     /// Compact the backing store, rewriting it with exactly one Insert record
@@ -160,6 +276,8 @@ where
         })
     }
 
+    // ── write operations ──────────────────────────────────────────────────────
+
     /// Delete all documents whose data satisfies `predicate`.
     ///
     /// Returns the count of deleted documents.
@@ -168,55 +286,65 @@ where
         F: Fn(&T) -> bool + Send + Sync,
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
-        let deleted: Vec<Document<T>> = if self.write_order == WriteOrder::FileFirst {
-            let matches: Vec<(Uuid, T)> = {
-                let data = self.read_lock().await?;
-                data.iter()
+        let deleted: Vec<(Uuid, Vec<u8>, Document<T>)> =
+            if self.write_order == WriteOrder::FileFirst {
+                let matches: Vec<(Uuid, T)> = {
+                    let data = self.read_lock().await?;
+                    data.iter()
+                        .filter_map(|(id, raw)| {
+                            self.deserialize::<T>(raw)
+                                .ok()
+                                .filter(|v| predicate(v))
+                                .map(|v| (*id, v))
+                        })
+                        .collect()
+                };
+                if matches.is_empty() {
+                    return Ok(0);
+                }
+                let docs: Vec<Document<T>> = matches.iter()
+                    .map(|(id, v)| Document::new(*id, v.clone()))
+                    .collect();
+                self.storage.persist(&docs, WalOp::Delete).await?;
+                let mut data = self.write_lock().await?;
+                matches.into_iter().zip(docs)
+                    .filter_map(|((id, _), doc)| {
+                        data.remove(&id).map(|raw| (id, raw, doc))
+                    })
+                    .collect()
+            } else {
+                let mut data = self.write_lock().await?;
+                let matches: Vec<(Uuid, Vec<u8>)> = data
+                    .iter()
                     .filter_map(|(id, raw)| {
                         self.deserialize::<T>(raw)
                             .ok()
                             .filter(|v| predicate(v))
-                            .map(|v| (*id, v))
+                            .map(|_| (*id, raw.clone()))
+                    })
+                    .collect();
+                matches
+                    .into_iter()
+                    .filter_map(|(id, raw)| {
+                        data.remove(&id).map(|removed| {
+                            let v = self.deserialize::<T>(&removed).unwrap();
+                            (id, raw, Document::new(id, v))
+                        })
                     })
                     .collect()
             };
-            if matches.is_empty() {
-                return Ok(0);
-            }
-            let docs: Vec<Document<T>> = matches.iter()
-                .map(|(id, v)| Document::new(*id, v.clone()))
-                .collect();
-            self.storage.persist(&docs, WalOp::Delete).await?;
-            {
-                let mut data = self.write_lock().await?;
-                for (id, _) in &matches {
-                    data.remove(id);
-                }
-            }
-            docs
-        } else {
-            let mut data = self.write_lock().await?;
-            let matches: Vec<(Uuid, Vec<u8>)> = data
-                .iter()
-                .filter_map(|(id, raw)| {
-                    self.deserialize::<T>(raw)
-                        .ok()
-                        .filter(|v| predicate(v))
-                        .map(|_| (*id, raw.clone()))
-                })
-                .collect();
-            matches
-                .into_iter()
-                .map(|(id, raw)| {
-                    data.remove(&id);
-                    Document::new(id, self.deserialize::<T>(&raw).unwrap())
-                })
-                .collect()
-        };
 
         let count = deleted.len();
-        if count > 0 && self.write_order == WriteOrder::MemoryFirst {
-            self.storage.persist(&deleted, WalOp::Delete).await?;
+        if count == 0 {
+            return Ok(0);
+        }
+
+        if self.write_order == WriteOrder::MemoryFirst {
+            let docs: Vec<Document<T>> = deleted.iter().map(|(_, _, d)| d.clone()).collect();
+            self.storage.persist(&docs, WalOp::Delete).await?;
+        }
+        for (id, raw, _) in &deleted {
+            self.index_on_delete(*id, raw).await;
         }
         Ok(count)
     }
@@ -227,14 +355,10 @@ where
     {
         let data = self.read_lock().await?;
         let serialized = self.serialize(search)?;
-
-        let uuids = data
-            .iter()
+        Ok(data.iter()
             .filter(|(_, value)| **value == serialized)
             .map(|(id, _)| *id)
-            .collect();
-
-        Ok(uuids)
+            .collect())
     }
 
     pub async fn insert_one<T>(&self, value: T) -> Result<Document<T>>
@@ -242,17 +366,17 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
         let id = Uuid::new_v4();
-        let serialized = self.serialize(&value)?;
+        let raw = self.serialize(&value)?;
         let doc = Document::new(id, value);
 
         if self.write_order == WriteOrder::FileFirst {
             self.storage.persist(&[doc.clone()], WalOp::Insert).await?;
         }
-        self.write_lock().await?.insert(id, serialized);
+        self.write_lock().await?.insert(id, raw.clone());
         if self.write_order == WriteOrder::MemoryFirst {
             self.storage.persist(&[doc.clone()], WalOp::Insert).await?;
         }
-
+        self.index_on_insert(id, &raw).await;
         Ok(doc)
     }
 
@@ -279,14 +403,16 @@ where
         }
         {
             let mut data = self.write_lock().await?;
-            for (id, raw, _) in prepared {
-                data.insert(id, raw);
+            for (id, raw, _) in &prepared {
+                data.insert(*id, raw.clone());
             }
         }
         if self.write_order == WriteOrder::MemoryFirst {
             self.storage.persist(&docs, WalOp::Insert).await?;
         }
-
+        for (id, raw, _) in &prepared {
+            self.index_on_insert(*id, raw).await;
+        }
         Ok(docs)
     }
 
@@ -313,7 +439,7 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
     {
-        let serialized = self.serialize(&new_value)?;
+        let new_raw = self.serialize(&new_value)?;
         let doc = Document::new(*id, new_value);
 
         if self.write_order == WriteOrder::FileFirst {
@@ -321,35 +447,41 @@ where
                 return Ok(false);
             }
             self.storage.persist(&[doc], WalOp::Update).await?;
-            if let Some(entry) = self.write_lock().await?.get_mut(id) {
-                *entry = serialized;
-            }
-            Ok(true)
-        } else {
-            let updated = {
+            let old_raw = {
                 let mut data = self.write_lock().await?;
                 if let Some(entry) = data.get_mut(id) {
-                    *entry = serialized;
-                    true
+                    let old = entry.clone();
+                    *entry = new_raw.clone();
+                    Some(old)
                 } else {
-                    false
+                    None
                 }
             };
-            if updated {
-                self.storage.persist(&[doc], WalOp::Update).await?;
+            if let Some(old) = old_raw {
+                self.index_on_update(*id, &old, &new_raw).await;
+                Ok(true)
+            } else {
+                Ok(false)
             }
-            Ok(updated)
+        } else {
+            let old_raw = {
+                let mut data = self.write_lock().await?;
+                if let Some(entry) = data.get_mut(id) {
+                    let old = entry.clone();
+                    *entry = new_raw.clone();
+                    Some(old)
+                } else {
+                    None
+                }
+            };
+            if let Some(old) = old_raw {
+                self.storage.persist(&[doc], WalOp::Update).await?;
+                self.index_on_update(*id, &old, &new_raw).await;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         }
-    }
-
-    async fn remove_document<T>(&self, id: Uuid) -> Result<Document<T>>
-    where
-        for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
-    {
-        let mut data = self.write_lock().await?;
-        let raw = data.remove(&id).ok_or(RedDbError::NotFound(id))?;
-        let value = self.deserialize(&raw)?;
-        Ok(Document::new(id, value))
     }
 
     pub async fn delete_one<T>(&self, id: &Uuid) -> Result<Document<T>>
@@ -358,12 +490,20 @@ where
     {
         if self.write_order == WriteOrder::FileFirst {
             let doc: Document<T> = self.find_one(id).await?;
+            let raw = self.serialize(&doc.data)?;
             self.storage.persist(&[doc.clone()], WalOp::Delete).await?;
             self.write_lock().await?.remove(id).ok_or(RedDbError::NotFound(*id))?;
+            self.index_on_delete(*id, &raw).await;
             Ok(doc)
         } else {
-            let doc = self.remove_document(*id).await?;
+            let (doc, raw) = {
+                let mut data = self.write_lock().await?;
+                let raw = data.remove(id).ok_or(RedDbError::NotFound(*id))?;
+                let value = self.deserialize(&raw)?;
+                (Document::new(*id, value), raw)
+            };
             self.storage.persist(&[doc.clone()], WalOp::Delete).await?;
+            self.index_on_delete(*id, &raw).await;
             Ok(doc)
         }
     }
@@ -373,13 +513,9 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq,
     {
         let data = self.read_lock().await?;
-
-        let docs = data
-            .iter()
+        Ok(data.iter()
             .map(|(id, raw)| Document::new(*id, self.deserialize(raw).unwrap()))
-            .collect();
-
-        Ok(docs)
+            .collect())
     }
 
     pub async fn find<T>(&self, search: &T) -> Result<Vec<Document<T>>>
@@ -388,14 +524,10 @@ where
     {
         let data = self.read_lock().await?;
         let serialized = self.serialize(search)?;
-
-        let docs = data
-            .iter()
+        Ok(data.iter()
             .filter(|(_, raw)| **raw == serialized)
             .map(|(id, raw)| Document::new(*id, self.deserialize(raw).unwrap()))
-            .collect();
-
-        Ok(docs)
+            .collect())
     }
 
     pub async fn update<T>(&self, search: &T, new_value: &T) -> Result<usize>
@@ -403,7 +535,7 @@ where
         for<'de> T: Serialize + Deserialize<'de> + Clone + Debug + PartialEq + Send + Sync,
     {
         let serialized_search = self.serialize(search)?;
-        let serialized_new = self.serialize(new_value)?;
+        let new_raw = self.serialize(new_value)?;
 
         if self.write_order == WriteOrder::FileFirst {
             let matching_ids: Vec<Uuid> = {
@@ -420,27 +552,39 @@ where
                 .map(|id| Document::new(*id, new_value.clone()))
                 .collect();
             self.storage.persist(&docs, WalOp::Update).await?;
-            let mut data = self.write_lock().await?;
-            for id in &matching_ids {
-                if let Some(entry) = data.get_mut(id) {
-                    *entry = serialized_new.clone();
+            {
+                let mut data = self.write_lock().await?;
+                for id in &matching_ids {
+                    if let Some(entry) = data.get_mut(id) {
+                        *entry = new_raw.clone();
+                    }
                 }
+            }
+            for id in &matching_ids {
+                self.index_on_update(*id, &serialized_search, &new_raw).await;
             }
             Ok(matching_ids.len())
         } else {
-            let docs: Vec<Document<T>> = {
+            let updated: Vec<(Uuid, Vec<u8>)> = {
                 let mut data = self.write_lock().await?;
                 data.iter_mut()
                     .filter(|(_, raw)| **raw == serialized_search)
                     .map(|(id, raw)| {
-                        *raw = serialized_new.clone();
-                        Document::new(*id, new_value.clone())
+                        let old = raw.clone();
+                        *raw = new_raw.clone();
+                        (*id, old)
                     })
                     .collect()
             };
-            let count = docs.len();
+            let count = updated.len();
             if count > 0 {
+                let docs: Vec<Document<T>> = updated.iter()
+                    .map(|(id, _)| Document::new(*id, new_value.clone()))
+                    .collect();
                 self.storage.persist(&docs, WalOp::Update).await?;
+                for (id, old_raw) in &updated {
+                    self.index_on_update(*id, old_raw, &new_raw).await;
+                }
             }
             Ok(count)
         }
@@ -456,39 +600,50 @@ where
         }
 
         if self.write_order == WriteOrder::FileFirst {
-            let docs: Vec<Document<T>> = {
+            let (docs, raws): (Vec<Document<T>>, Vec<Vec<u8>>) = {
                 let data = self.read_lock().await?;
                 uuids.iter()
                     .filter_map(|id| {
                         data.get(id).and_then(|raw| {
                             self.deserialize::<T>(raw).ok()
-                                .map(|v| Document::new(*id, v))
+                                .map(|v| (Document::new(*id, v), raw.clone()))
                         })
                     })
-                    .collect()
+                    .unzip()
             };
             self.storage.persist(&docs, WalOp::Delete).await?;
             let mut data = self.write_lock().await?;
             for id in &uuids {
                 data.remove(id);
             }
+            drop(data);
+            for (id, raw) in uuids.iter().zip(&raws) {
+                self.index_on_delete(*id, raw).await;
+            }
             Ok(docs.len())
         } else {
-            let docs: Vec<Document<T>> = {
+            let (docs, raws): (Vec<Document<T>>, Vec<Vec<u8>>) = {
                 let mut data = self.write_lock().await?;
                 uuids.into_iter()
                     .filter_map(|id| {
                         data.remove(&id).and_then(|raw| {
                             self.deserialize::<T>(&raw).ok()
-                                .map(|v| Document::new(id, v))
+                                .map(|v| (Document::new(id, v), raw))
                         })
                     })
-                    .collect()
+                    .unzip()
             };
-            self.storage.persist(&docs, WalOp::Delete).await?;
+            if !docs.is_empty() {
+                self.storage.persist(&docs, WalOp::Delete).await?;
+                for (id, raw) in docs.iter().map(|d| d.id).zip(&raws) {
+                    self.index_on_delete(id, raw).await;
+                }
+            }
             Ok(docs.len())
         }
     }
+
+    // ── serialization (private) ───────────────────────────────────────────────
 
     fn serialize<T>(&self, value: &T) -> Result<Vec<u8>>
     where
@@ -508,6 +663,8 @@ where
             .map_err(|e| RedDbError::Deserialize(e.to_string()))
     }
 }
+
+// ── unit tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[cfg(feature = "bin_ser")]
@@ -693,6 +850,106 @@ mod write_order_tests {
         let n = db.delete(&Item { v: 1 }).await.unwrap();
         assert_eq!(n, 2);
         assert_eq!(db.find_all::<Item>().await.unwrap().len(), 1);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "bin_ser")]
+mod index_tests {
+    use super::*;
+    use crate::MemDb;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct User {
+        name: String,
+        role: String,
+    }
+
+    fn user(name: &str, role: &str) -> User {
+        User { name: name.into(), role: role.into() }
+    }
+
+    async fn seeded() -> MemDb {
+        let db = MemDb::new::<User>("_").await.unwrap();
+        db.insert(vec![
+            user("alice", "admin"),
+            user("bob", "user"),
+            user("carol", "admin"),
+        ])
+        .await
+        .unwrap();
+        db
+    }
+
+    #[tokio::test]
+    async fn add_index_and_lookup() {
+        let db = seeded().await;
+        db.add_index::<User, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+        let admins = db.using_index::<User>("by_role", "admin").await.unwrap();
+        assert_eq!(admins.len(), 2);
+        let names: Vec<&str> = admins.iter().map(|d| d.data.name.as_str()).collect();
+        assert!(names.contains(&"alice"));
+        assert!(names.contains(&"carol"));
+
+        let users = db.using_index::<User>("by_role", "user").await.unwrap();
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].data.name, "bob");
+    }
+
+    #[tokio::test]
+    async fn index_updated_on_insert() {
+        let db = seeded().await;
+        db.add_index::<User, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+        db.insert_one(user("dave", "admin")).await.unwrap();
+
+        let admins = db.using_index::<User>("by_role", "admin").await.unwrap();
+        assert_eq!(admins.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn index_updated_on_delete() {
+        let db = seeded().await;
+        db.add_index::<User, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+        let alice = db.using_index::<User>("by_role", "admin").await.unwrap()
+            .into_iter().find(|d| d.data.name == "alice").unwrap();
+        db.delete_one::<User>(&alice.id).await.unwrap();
+
+        let admins = db.using_index::<User>("by_role", "admin").await.unwrap();
+        assert_eq!(admins.len(), 1);
+        assert_eq!(admins[0].data.name, "carol");
+    }
+
+    #[tokio::test]
+    async fn index_updated_on_update_one() {
+        let db = seeded().await;
+        db.add_index::<User, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+        let bob = db.using_index::<User>("by_role", "user").await.unwrap().pop().unwrap();
+        db.update_one(&bob.id, user("bob", "admin")).await.unwrap();
+
+        let admins = db.using_index::<User>("by_role", "admin").await.unwrap();
+        assert_eq!(admins.len(), 3);
+        let users = db.using_index::<User>("by_role", "user").await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unknown_index_returns_error() {
+        let db = MemDb::new::<User>("_").await.unwrap();
+        let result = db.using_index::<User>("no_such_index", "x").await;
+        assert!(matches!(result, Err(RedDbError::IndexNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn index_key_with_no_matches_returns_empty() {
+        let db = seeded().await;
+        db.add_index::<User, _>("by_role", |u| u.role.clone()).await.unwrap();
+        let result = db.using_index::<User>("by_role", "superuser").await.unwrap();
+        assert!(result.is_empty());
     }
 }
 

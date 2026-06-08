@@ -4,6 +4,7 @@ use crate::wal::WalOp;
 use crate::RedDbHM;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 mod file;
 mod mem;
@@ -30,4 +31,8 @@ pub trait Storage {
 
     /// Size of the backing store in bytes (0 for in-memory backends).
     async fn file_size(&self) -> Result<u64>;
+
+    /// Write a batch of raw (op, id, payload) records directly, bypassing
+    /// type-aware serialization. Used by `Transaction::commit`.
+    async fn persist_raw(&self, records: &[(WalOp, Uuid, Vec<u8>)]) -> Result<()>;
 }

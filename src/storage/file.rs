@@ -214,6 +214,15 @@ where
         let file = self.db_file.lock().await;
         Ok(file.metadata().await?.len())
     }
+
+    async fn persist_raw(&self, records: &[(WalOp, Uuid, Vec<u8>)]) -> Result<()> {
+        let mut file = self.db_file.lock().await;
+        for (op, id, payload) in records {
+            write_record(&mut *file, *op, *id, payload).await?;
+        }
+        file.sync_data().await?;
+        Ok(())
+    }
 }
 
 impl<SE> FileStorage<SE>

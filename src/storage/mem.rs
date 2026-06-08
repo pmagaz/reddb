@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use super::Storage;
 use crate::document::Document;
@@ -40,6 +41,10 @@ impl Storage for MemStorage {
 
     async fn file_size(&self) -> Result<u64> {
         Ok(0)
+    }
+
+    async fn persist_raw(&self, _records: &[(WalOp, Uuid, Vec<u8>)]) -> Result<()> {
+        Ok(())
     }
 }
 

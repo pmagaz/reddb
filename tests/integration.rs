@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
+struct UserRec {
+    name: String,
+    role: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 struct TestStruct {
     foo: String,
 }
@@ -556,4 +562,122 @@ async fn file_first_update_where_persists_across_reopen() {
     assert_eq!(after_count, 1);
 
     cleanup(file);
+}
+
+// ── Transaction ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn transaction_commit_survives_reopen() {
+    let file = ".it_tx_commit.ron";
+    cleanup(file);
+
+    let (inserted_id, updated_id) = {
+        let db = RonDb::new::<TestStruct>(".it_tx_commit").await.unwrap();
+        let existing = db.insert_one(TestStruct { foo: "original".into() }).await.unwrap();
+
+        let mut tx = db.begin();
+        let new_doc = tx.insert_one(TestStruct { foo: "tx_insert".into() }).unwrap();
+        tx.update_one(&existing.id, TestStruct { foo: "tx_update".into() }).unwrap();
+        tx.commit().await.unwrap();
+
+        (new_doc.id, existing.id)
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_tx_commit").await.unwrap();
+    let inserted: Document<TestStruct> = db2.find_one(&inserted_id).await.unwrap();
+    assert_eq!(inserted.data.foo, "tx_insert");
+    let updated: Document<TestStruct> = db2.find_one(&updated_id).await.unwrap();
+    assert_eq!(updated.data.foo, "tx_update");
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn transaction_rollback_leaves_state_unchanged() {
+    let db = MemDb::new::<TestStruct>("unused").await.unwrap();
+    let doc = db.insert_one(TestStruct { foo: "original".into() }).await.unwrap();
+
+    let mut tx = db.begin();
+    tx.insert_one(TestStruct { foo: "phantom".into() }).unwrap();
+    tx.update_one(&doc.id, TestStruct { foo: "changed".into() }).unwrap();
+    tx.rollback();
+
+    let all = db.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].data.foo, "original");
+}
+
+#[tokio::test]
+async fn transaction_delete_survives_reopen() {
+    let file = ".it_tx_delete.ron";
+    cleanup(file);
+
+    let keep_id = {
+        let db = RonDb::new::<TestStruct>(".it_tx_delete").await.unwrap();
+        let d1 = db.insert_one(TestStruct { foo: "delete_me".into() }).await.unwrap();
+        let d2 = db.insert_one(TestStruct { foo: "keep_me".into() }).await.unwrap();
+
+        let mut tx = db.begin();
+        tx.delete_one(&d1.id);
+        tx.commit().await.unwrap();
+
+        d2.id
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_tx_delete").await.unwrap();
+    let all = db2.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].id, keep_id);
+
+    cleanup(file);
+}
+
+// ── HashIndex ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn hash_index_lookup_persisted_data() {
+    let file = ".it_index.ron";
+    cleanup(file);
+
+    {
+        let db = RonDb::new::<UserRec>(".it_index").await.unwrap();
+        db.insert(vec![
+            UserRec { name: "alice".into(), role: "admin".into() },
+            UserRec { name: "bob".into(),   role: "user".into()  },
+            UserRec { name: "carol".into(), role: "admin".into() },
+        ])
+        .await
+        .unwrap();
+    }
+
+    let db2 = RonDb::new::<UserRec>(".it_index").await.unwrap();
+    db2.add_index::<UserRec, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+    let admins = db2.using_index::<UserRec>("by_role", "admin").await.unwrap();
+    assert_eq!(admins.len(), 2);
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn hash_index_stays_consistent_after_mutations() {
+    let db = MemDb::new::<UserRec>("unused").await.unwrap();
+    db.add_index::<UserRec, _>("by_role", |u| u.role.clone()).await.unwrap();
+
+    let d1 = db.insert_one(UserRec { name: "alice".into(), role: "admin".into() }).await.unwrap();
+    let d2 = db.insert_one(UserRec { name: "bob".into(),   role: "user".into()  }).await.unwrap();
+    db.insert_one(UserRec { name: "carol".into(), role: "admin".into() }).await.unwrap();
+
+    // Promote bob to admin
+    db.update_one(&d2.id, UserRec { name: "bob".into(), role: "admin".into() }).await.unwrap();
+
+    let admins = db.using_index::<UserRec>("by_role", "admin").await.unwrap();
+    assert_eq!(admins.len(), 3);
+    let users = db.using_index::<UserRec>("by_role", "user").await.unwrap();
+    assert!(users.is_empty());
+
+    // Delete alice
+    db.delete_one::<UserRec>(&d1.id).await.unwrap();
+    let admins_after = db.using_index::<UserRec>("by_role", "admin").await.unwrap();
+    assert_eq!(admins_after.len(), 2);
 }

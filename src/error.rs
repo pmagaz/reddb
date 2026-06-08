@@ -25,6 +25,9 @@ pub enum RedDbError {
 
     #[error("persistence failed: {0}")]
     PersistFailed(String),
+
+    #[error("index not found: {0}")]
+    IndexNotFound(String),
 }
 
 #[cfg(test)]
@@ -73,5 +76,11 @@ mod tests {
     fn persist_failed_carries_message() {
         let err = RedDbError::PersistFailed("disk full".to_string());
         assert!(err.to_string().contains("disk full"));
+    }
+
+    #[test]
+    fn index_not_found_carries_name() {
+        let err = RedDbError::IndexNotFound("by_email".to_string());
+        assert!(err.to_string().contains("by_email"));
     }
 }
