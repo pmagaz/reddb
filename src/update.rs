@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::WriteOrder;
 use crate::document::Document;
 use crate::error::Result;
 use crate::serializer::Serializer;
@@ -62,34 +63,70 @@ where
     where
         G: Fn(T) -> T + Send + Sync,
     {
-        // Collect matching IDs and their new values while holding write lock.
-        let updated: Vec<Document<T>> = {
-            let mut data = self.db.write_lock().await?;
-
-            let mut updated = Vec::new();
-            for (id, raw) in data.iter_mut() {
-                if let Some(ref lim) = self.limit {
-                    if updated.len() >= *lim {
-                        break;
+        if self.db.write_order == WriteOrder::FileFirst {
+            // Collect matches and build transformed documents under read lock.
+            let updates: Vec<(crate::Uuid, Vec<u8>, T)> = {
+                let data = self.db.read_lock().await?;
+                let mut updates = Vec::new();
+                for (id, raw) in data.iter() {
+                    if let Some(ref lim) = self.limit {
+                        if updates.len() >= *lim {
+                            break;
+                        }
+                    }
+                    let value: T = self.db.deserialize_raw(raw)?;
+                    if (self.predicate)(&value) {
+                        let new_value = transform(value);
+                        let new_raw = self.db.serialize_raw(&new_value)?;
+                        updates.push((*id, new_raw, new_value));
                     }
                 }
-                let value: T = self.db.deserialize_raw(raw)?;
-                if (self.predicate)(&value) {
-                    let new_value = transform(value);
-                    *raw = self.db.serialize_raw(&new_value)?;
-                    updated.push(Document::new(*id, new_value));
+                updates
+            };
+
+            let docs: Vec<Document<T>> = updates.iter()
+                .map(|(id, _, v)| Document::new(*id, v.clone()))
+                .collect();
+
+            if !docs.is_empty() {
+                self.db.storage_persist(&docs, WalOp::Update).await?;
+                let mut data = self.db.write_lock().await?;
+                for (id, raw, _) in updates {
+                    if let Some(entry) = data.get_mut(&id) {
+                        *entry = raw;
+                    }
                 }
             }
-            updated
-        };
 
-        if !updated.is_empty() {
-            self.db
-                .storage_persist(&updated, WalOp::Update)
-                .await?;
+            Ok(docs)
+        } else {
+            // MemoryFirst: update in-memory first under write lock, then persist.
+            let updated: Vec<Document<T>> = {
+                let mut data = self.db.write_lock().await?;
+
+                let mut updated = Vec::new();
+                for (id, raw) in data.iter_mut() {
+                    if let Some(ref lim) = self.limit {
+                        if updated.len() >= *lim {
+                            break;
+                        }
+                    }
+                    let value: T = self.db.deserialize_raw(raw)?;
+                    if (self.predicate)(&value) {
+                        let new_value = transform(value);
+                        *raw = self.db.serialize_raw(&new_value)?;
+                        updated.push(Document::new(*id, new_value));
+                    }
+                }
+                updated
+            };
+
+            if !updated.is_empty() {
+                self.db.storage_persist(&updated, WalOp::Update).await?;
+            }
+
+            Ok(updated)
         }
-
-        Ok(updated)
     }
 }
 

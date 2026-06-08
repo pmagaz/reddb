@@ -16,7 +16,7 @@ pub struct MemStorage;
 
 #[async_trait]
 impl Storage for MemStorage {
-    async fn new(_db_name: &str) -> Result<Self> {
+    async fn new(_db_name: &str, _compaction_ratio: f64) -> Result<Self> {
         Ok(MemStorage)
     }
 
@@ -32,6 +32,14 @@ impl Storage for MemStorage {
         for<'de> T: Serialize + Deserialize<'de> + Debug + Sync + Clone,
     {
         Ok(())
+    }
+
+    async fn compact(&self, _data: &RedDbHM) -> Result<()> {
+        Ok(())
+    }
+
+    async fn file_size(&self) -> Result<u64> {
+        Ok(0)
     }
 }
 
@@ -63,8 +71,22 @@ mod tests {
 
     #[tokio::test]
     async fn new_ignores_db_name() {
-        let storage = MemStorage::new("any_path").await.unwrap();
+        let storage = MemStorage::new("any_path", 2.0).await.unwrap();
         let map = storage.load::<S>().await.unwrap();
         assert!(map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn file_size_is_zero() {
+        let storage = MemStorage;
+        assert_eq!(storage.file_size().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn compact_is_noop() {
+        use std::collections::HashMap;
+        let storage = MemStorage;
+        let data: RedDbHM = HashMap::new();
+        assert!(storage.compact(&data).await.is_ok());
     }
 }

@@ -1,4 +1,4 @@
-use reddb::{Document, MemDb, RonDb};
+use reddb::{DbConfig, Document, MemDb, RonDb, WriteOrder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -410,6 +410,150 @@ async fn compaction_produces_correct_state() {
     let foos: Vec<&str> = all.iter().map(|d| d.data.foo.as_str()).collect();
     assert!(foos.contains(&"b"));
     assert!(foos.contains(&"c"));
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn manual_compact_shrinks_file() {
+    let file = ".it_manual_compact.ron";
+    cleanup(file);
+
+    // Use a high ratio so auto-compaction on reopen doesn't fire (we want to
+    // test the explicit compact() call, not the automatic one).
+    let db: RonDb = RonDb::open::<TestStruct>(
+        DbConfig::new(".it_manual_compact").compaction_ratio(100.0),
+    )
+    .await
+    .unwrap();
+
+    let docs = db
+        .insert(vec![
+            TestStruct { foo: "a".into() },
+            TestStruct { foo: "b".into() },
+            TestStruct { foo: "c".into() },
+        ])
+        .await
+        .unwrap();
+    db.delete_one::<TestStruct>(&docs[0].id).await.unwrap();
+    db.delete_one::<TestStruct>(&docs[1].id).await.unwrap();
+
+    let size_before = db.stats().await.unwrap().file_size_bytes;
+    db.compact().await.unwrap();
+    let size_after = db.stats().await.unwrap().file_size_bytes;
+    assert!(size_after < size_before, "size_after={size_after} size_before={size_before}");
+
+    let all = db.find_all::<TestStruct>().await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].data.foo, "c");
+
+    cleanup(file);
+}
+
+// ── storage stats ─────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn storage_stats_memdb() {
+    let db = MemDb::new::<TestStruct>("unused").await.unwrap();
+
+    let s0 = db.stats().await.unwrap();
+    assert_eq!(s0.live_document_count, 0);
+    assert_eq!(s0.file_size_bytes, 0);
+    assert_eq!(s0.compaction_ratio, 2.0);
+
+    db.insert(vec![
+        TestStruct { foo: "x".into() },
+        TestStruct { foo: "y".into() },
+    ])
+    .await
+    .unwrap();
+
+    let s1 = db.stats().await.unwrap();
+    assert_eq!(s1.live_document_count, 2);
+    assert_eq!(s1.file_size_bytes, 0);
+}
+
+#[tokio::test]
+async fn storage_stats_file_size_grows() {
+    let file = ".it_stats_size.ron";
+    cleanup(file);
+
+    let db = RonDb::new::<TestStruct>(".it_stats_size").await.unwrap();
+    let s0 = db.stats().await.unwrap();
+
+    db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap();
+    let s1 = db.stats().await.unwrap();
+
+    assert!(s1.file_size_bytes > s0.file_size_bytes);
+    assert_eq!(s1.live_document_count, 1);
+
+    cleanup(file);
+}
+
+// ── WriteOrder::FileFirst ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn file_first_insert_persists_across_reopen() {
+    let file = ".it_file_first.ron";
+    cleanup(file);
+
+    let id = {
+        let db: RonDb = RonDb::open::<TestStruct>(
+            DbConfig::new(".it_file_first").write_order(WriteOrder::FileFirst),
+        )
+        .await
+        .unwrap();
+        let doc = db
+            .insert_one(TestStruct { foo: "file_first".into() })
+            .await
+            .unwrap();
+        doc.id
+    };
+
+    let db2 = RonDb::new::<TestStruct>(".it_file_first").await.unwrap();
+    let found = db2.get::<TestStruct>(&id).await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().data.foo, "file_first");
+
+    cleanup(file);
+}
+
+#[tokio::test]
+async fn file_first_update_where_persists_across_reopen() {
+    let file = ".it_file_first_uw.ron";
+    cleanup(file);
+
+    {
+        let db: RonDb = RonDb::open::<TestStruct>(
+            DbConfig::new(".it_file_first_uw").write_order(WriteOrder::FileFirst),
+        )
+        .await
+        .unwrap();
+        db.insert(vec![
+            TestStruct { foo: "before".into() },
+            TestStruct { foo: "other".into() },
+        ])
+        .await
+        .unwrap();
+        let n = db
+            .update_where::<TestStruct, _>(|t| t.foo == "before")
+            .exec(|mut t| {
+                t.foo = "after".into();
+                t
+            })
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    let db2 = RonDb::new::<TestStruct>(".it_file_first_uw").await.unwrap();
+    let after_count = db2
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "after")
+        .count()
+        .await
+        .unwrap();
+    assert_eq!(after_count, 1);
 
     cleanup(file);
 }

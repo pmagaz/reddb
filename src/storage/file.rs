@@ -49,6 +49,16 @@ fn verify_header(header: &[u8; 32], expected: FormatId) -> Result<()> {
     Ok(())
 }
 
+/// Byte size the file would have after compacting `data`.
+fn compacted_size(data: &RedDbHM) -> u64 {
+    let payload_bytes: u64 = data.values().map(|v| v.len() as u64).sum();
+    HEADER_LEN + data.len() as u64 * RECORD_OVERHEAD as u64 + payload_bytes
+}
+
+fn should_compact(file_size: u64, live_size: u64, ratio: f64) -> bool {
+    live_size > 0 && (file_size as f64) >= (live_size as f64) * ratio
+}
+
 async fn open_append(path: &str) -> Result<File> {
     Ok(OpenOptions::new()
         .read(true)
@@ -111,6 +121,7 @@ async fn write_record(file: &mut File, op: WalOp, id: Uuid, payload: &[u8]) -> R
 #[derive(Debug)]
 pub struct FileStorage<SE> {
     file_path: String,
+    compaction_ratio: f64,
     serializer: SE,
     db_file: Mutex<File>,
 }
@@ -120,12 +131,13 @@ impl<SE> Storage for FileStorage<SE>
 where
     SE: Serializer + Debug + Sync + Send,
 {
-    async fn new(db_name: &str) -> Result<Self> {
+    async fn new(db_name: &str, compaction_ratio: f64) -> Result<Self> {
         let serializer = SE::default();
         let db_path = format!("{}{}", db_name, serializer.format_id().extension());
         let file = open_append(&db_path).await?;
         let storage = Self {
             serializer,
+            compaction_ratio,
             file_path: db_path,
             db_file: Mutex::new(file),
         };
@@ -137,11 +149,11 @@ where
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
     {
-        let mut map: RedDbHM = HashMap::new();
-
-        {
+        let (map, file_size) = {
             let mut file = self.db_file.lock().await;
+            let file_size = file.metadata().await?.len();
             let records = read_records(&mut *file).await?;
+            let mut map: RedDbHM = HashMap::new();
             for (op, id, payload) in records {
                 if op == WalOp::Delete {
                     map.remove(&id);
@@ -149,9 +161,14 @@ where
                     map.insert(id, payload);
                 }
             }
+            (map, file_size)
+        };
+
+        let live_size = compacted_size(&map);
+        if should_compact(file_size, live_size, self.compaction_ratio) {
+            self.compact(&map).await?;
         }
 
-        self.compact_data(&map).await?;
         Ok(map)
     }
 
@@ -173,6 +190,30 @@ where
         file.sync_data().await?;
         Ok(())
     }
+
+    async fn compact(&self, data: &RedDbHM) -> Result<()> {
+        let tmp_path = format!("{}.tmp", self.file_path);
+
+        {
+            let mut tmp = File::create(&tmp_path).await?;
+            let header = build_header(self.serializer.format_id());
+            tmp.write_all(&header).await?;
+            for (id, payload) in data {
+                write_record(&mut tmp, WalOp::Insert, *id, payload).await?;
+            }
+            tmp.sync_all().await?;
+        }
+
+        let mut file = self.db_file.lock().await;
+        tokio::fs::rename(&tmp_path, &self.file_path).await?;
+        *file = open_append(&self.file_path).await?;
+        Ok(())
+    }
+
+    async fn file_size(&self) -> Result<u64> {
+        let file = self.db_file.lock().await;
+        Ok(file.metadata().await?.len())
+    }
 }
 
 impl<SE> FileStorage<SE>
@@ -192,25 +233,6 @@ where
             file.read_exact(&mut header).await?;
             verify_header(&header, self.serializer.format_id())?;
         }
-        Ok(())
-    }
-
-    pub async fn compact_data(&self, data: &RedDbHM) -> Result<()> {
-        let tmp_path = format!("{}.tmp", self.file_path);
-
-        {
-            let mut tmp = File::create(&tmp_path).await?;
-            let header = build_header(self.serializer.format_id());
-            tmp.write_all(&header).await?;
-            for (id, payload) in data {
-                write_record(&mut tmp, WalOp::Insert, *id, payload).await?;
-            }
-            tmp.sync_all().await?;
-        }
-
-        let mut file = self.db_file.lock().await;
-        tokio::fs::rename(&tmp_path, &self.file_path).await?;
-        *file = open_append(&self.file_path).await?;
         Ok(())
     }
 }
@@ -250,7 +272,7 @@ mod tests {
     #[test]
     fn verify_header_fails_for_wrong_version() {
         let mut h = build_header(FormatId::Yaml);
-        h[8] = 0xFF; // corrupt version LSB
+        h[8] = 0xFF;
         assert!(matches!(verify_header(&h, FormatId::Yaml), Err(RedDbError::DataCorrupted)));
     }
 
@@ -260,5 +282,25 @@ mod tests {
         assert_eq!(FormatId::Ron  as u8, 1);
         assert_eq!(FormatId::Yaml as u8, 2);
         assert_eq!(FormatId::Bin  as u8, 3);
+    }
+
+    #[test]
+    fn compacted_size_is_header_plus_records() {
+        let mut data: RedDbHM = HashMap::new();
+        let id = Uuid::new_v4();
+        let payload = vec![1u8; 10];
+        data.insert(id, payload);
+        // HEADER_LEN(32) + 1 * RECORD_OVERHEAD(21) + 10 payload bytes = 63
+        assert_eq!(compacted_size(&data), 63);
+    }
+
+    #[test]
+    fn should_compact_triggers_when_file_exceeds_threshold() {
+        // file_size 200, live_size 50, ratio 2.0 → 200 >= 100 → compact
+        assert!(should_compact(200, 50, 2.0));
+        // file_size 80, live_size 50, ratio 2.0 → 80 < 100 → no compact
+        assert!(!should_compact(80, 50, 2.0));
+        // live_size 0 → never compact (empty db)
+        assert!(!should_compact(32, 0, 2.0));
     }
 }
