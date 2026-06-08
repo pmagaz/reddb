@@ -49,6 +49,6 @@
 
 | # | Task | Tests | Status | Commit |
 |---|------|-------|--------|--------|
-| 4.1 | `Transaction` — `begin()`, `commit()`, `rollback()` | unit + integration | ⬜ | — |
-| 4.2 | `HashIndex` — `add_index()`, `using_index()` | unit + integration | ⬜ | — |
-| 4.3 | Benchmarks (criterion) | — | ⬜ | — |
+| 4.1 | `Transaction` — `begin()`, `commit()`, `rollback()` | unit + integration | ✅ | `9c4ffe1` |
+| 4.2 | `HashIndex` — `add_index()`, `using_index()` | unit + integration | ✅ | `9c4ffe1` |
+| 4.3 | Benchmarks (criterion) | — | ✅ | `9c4ffe1` |
