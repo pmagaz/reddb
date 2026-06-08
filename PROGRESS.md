@@ -38,10 +38,10 @@
 
 | # | Task | Tests | Status | Commit |
 |---|------|-------|--------|--------|
-| 3.1 | Threshold-based compaction on startup | unit + integration | ✅ | `TBD` |
-| 3.2 | Manual `compact()` on `RedDb` | unit + integration | ✅ | `TBD` |
-| 3.3 | `WriteOrder::FileFirst` option | unit + integration | ✅ | `TBD` |
-| 3.4 | `StorageStats` struct + `stats()` method | unit + integration | ✅ | `TBD` |
+| 3.1 | Threshold-based compaction on startup | unit + integration | ✅ | `76ec918` |
+| 3.2 | Manual `compact()` on `RedDb` | unit + integration | ✅ | `76ec918` |
+| 3.3 | `WriteOrder::FileFirst` option | unit + integration | ✅ | `76ec918` |
+| 3.4 | `StorageStats` struct + `stats()` method | unit + integration | ✅ | `76ec918` |
 
 ---
 
