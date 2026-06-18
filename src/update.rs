@@ -26,6 +26,7 @@ where
     _marker: PhantomData<T>,
 }
 
+#[allow(private_bounds)]
 impl<'db, T, F, SE, ST> UpdateWhereBuilder<'db, T, F, SE, ST>
 where
     F: Fn(&T) -> bool + Send + Sync + 'static,
@@ -64,45 +65,39 @@ where
         G: Fn(T) -> T + Send + Sync,
     {
         if self.db.write_order == WriteOrder::FileFirst {
-            // Collect matches under read lock, build transformed documents.
-            let updates: Vec<(crate::Uuid, Vec<u8>, Vec<u8>, T)> = {
-                let data = self.db.read_lock().await?;
-                let mut updates = Vec::new();
-                for (id, old_raw) in data.iter() {
-                    if let Some(ref lim) = self.limit {
-                        if updates.len() >= *lim {
-                            break;
-                        }
-                    }
-                    let value: T = self.db.deserialize_raw(old_raw)?;
-                    if (self.predicate)(&value) {
-                        let new_value = transform(value);
-                        let new_raw = self.db.serialize_raw(&new_value)?;
-                        updates.push((*id, old_raw.clone(), new_raw, new_value));
+            let mut data = self.db.write_lock().await?;
+            let mut updates: Vec<(crate::Uuid, Vec<u8>, Vec<u8>, T)> = Vec::new();
+            for (id, old_raw) in data.iter() {
+                if let Some(ref lim) = self.limit {
+                    if updates.len() >= *lim {
+                        break;
                     }
                 }
-                updates
-            };
+                let value: T = self.db.deserialize_raw(old_raw)?;
+                if (self.predicate)(&value) {
+                    let new_value = transform(value);
+                    let new_raw = self.db.serialize_raw(&new_value)?;
+                    updates.push((*id, old_raw.clone(), new_raw, new_value));
+                }
+            }
+
+            if updates.is_empty() {
+                return Ok(Vec::new());
+            }
 
             let docs: Vec<Document<T>> = updates.iter()
                 .map(|(id, _, _, v)| Document::new(*id, v.clone()))
                 .collect();
-
-            if !docs.is_empty() {
-                self.db.storage_persist(&docs, WalOp::Update).await?;
-                {
-                    let mut data = self.db.write_lock().await?;
-                    for (id, _, new_raw, _) in &updates {
-                        if let Some(entry) = data.get_mut(id) {
-                            *entry = new_raw.clone();
-                        }
-                    }
-                }
-                for (id, old_raw, new_raw, _) in &updates {
-                    self.db.index_on_update(*id, old_raw, new_raw).await;
+            self.db.storage_persist(&docs, WalOp::Update).await?;
+            for (id, _, new_raw, _) in &updates {
+                if let Some(entry) = data.get_mut(id) {
+                    *entry = new_raw.clone();
                 }
             }
-
+            drop(data);
+            for (id, old_raw, new_raw, _) in &updates {
+                self.db.index_on_update(*id, old_raw, new_raw).await;
+            }
             Ok(docs)
         } else {
             // MemoryFirst: update in-memory under write lock, then persist.
