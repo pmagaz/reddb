@@ -22,6 +22,7 @@ pub struct Transaction<'db, SE, ST> {
     ops: Vec<(WalOp, Uuid, Vec<u8>)>,
 }
 
+#[allow(private_bounds)]
 impl<'db, SE, ST: 'static> Transaction<'db, SE, ST>
 where
     SE: Serializer + Debug,

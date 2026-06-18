@@ -24,6 +24,7 @@ pub struct QueryBuilder<'db, T, SE, ST> {
     _marker: PhantomData<T>,
 }
 
+#[allow(private_bounds)]
 impl<'db, T, SE, ST> QueryBuilder<'db, T, SE, ST>
 where
     SE: Serializer + Debug,

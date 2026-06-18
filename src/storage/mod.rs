@@ -13,7 +13,7 @@ pub use file::FileStorage;
 pub use mem::MemStorage;
 
 #[async_trait::async_trait]
-pub trait Storage {
+pub(crate) trait Storage {
     async fn new(db_name: &str, compaction_ratio: f64) -> Result<Self>
     where
         Self: Sized;

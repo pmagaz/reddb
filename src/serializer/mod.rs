@@ -1,9 +1,13 @@
 use anyhow::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "bin_ser")]
 mod bin;
+#[cfg(feature = "json_ser")]
 mod json;
+#[cfg(feature = "ron_ser")]
 mod ron;
+#[cfg(feature = "yaml_ser")]
 mod yaml;
 
 #[cfg(feature = "bin_ser")]
