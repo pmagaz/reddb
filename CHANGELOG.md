@@ -65,6 +65,11 @@ Files written by v1 are **not compatible** with v2.
 **AtomicBool index fast-path**
 - Write paths skip the index `RwLock` entirely when no indexes are registered
 
+**v1 → v2 migration helper (`migrate` feature)**
+- `reddb::migrate::from_v1::<T, SE>(v1_path, v2_name).await?` reads a v1 line-delimited file, replays all WAL operations, and writes every surviving document into a new v2 database preserving the original UUIDs
+- Gated behind the `migrate = []` Cargo feature flag
+- Supports JSON, RON, and YAML sources; binary (`.bin`) v1 files cannot be migrated because the v1 line-delimited format corrupted binary records
+
 **Benchmarks**
 - Criterion benchmarks: `insert_one`, `insert_batch`, `find_all`, `query_filter`, `update_one`, `delete_one`, `index_lookup`
 - Run with: `cargo bench --features bin_ser`

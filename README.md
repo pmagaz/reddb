@@ -530,7 +530,26 @@ let n = db.delete_where::<User, _>(|u| u.name == "alice").await?;
 
 ### File format
 
-v1 and v2 files are **not compatible**. v1 used newline-delimited records (which corrupted binary data); v2 uses length-prefix framing. Delete or rename your v1 database files before opening them with v2.
+v1 and v2 files are **not compatible**. v1 used newline-delimited records (which corrupted binary data); v2 uses length-prefix framing. Use the migration helper below or delete your v1 files before opening with v2.
+
+### Migrating data with `from_v1`
+
+Enable the `migrate` feature and call `from_v1` once to convert a v1 file into a new v2 database. Original document UUIDs are preserved.
+
+```toml
+reddb = { version = "2.0", features = ["ron_ser", "migrate"] }
+```
+
+```rust
+use reddb::serializer::Ron;
+
+// Reads users.ron (v1 format), writes users_v2.ron (v2 format)
+let count = reddb::migrate::from_v1::<User, Ron>("users.ron", "users_v2").await?;
+println!("migrated {} documents", count);
+```
+
+- Call this **once**. Running it a second time appends duplicates to the v2 file.
+- Binary (`.bin`) v1 files cannot be migrated — the v1 line-delimited format corrupted binary records. Use JSON, RON, or YAML sources only.
 
 ---
 
