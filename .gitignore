@@ -7,3 +7,5 @@ wasm-pack.log
 *.ron
 *.yaml
 *.json
+CLAUDE.md
+.claude/

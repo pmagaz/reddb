@@ -311,6 +311,131 @@ All type aliases expand to `RedDb<Serializer, Storage>`. You can compose your ow
 
 ---
 
+## Complete API reference
+
+### Construction
+
+```rust
+// Open or create with explicit config
+pub async fn open<T>(config: DbConfig) -> Result<Self>
+
+// Shorthand — equivalent to open(DbConfig::new(name))
+pub async fn new<T>(db_name: &str) -> Result<Self>
+```
+
+### Insert
+
+```rust
+pub async fn insert_one<T>(&self, value: T) -> Result<Document<T>>
+pub async fn insert<T>(&self, values: Vec<T>) -> Result<Vec<Document<T>>>
+```
+
+### Find
+
+```rust
+// By id — error if missing
+pub async fn find_one<T>(&self, id: &Uuid) -> Result<Document<T>>
+
+// By id — None if missing
+pub async fn get<T>(&self, id: &Uuid) -> Result<Option<Document<T>>>
+
+// All documents
+pub async fn find_all<T>(&self) -> Result<Vec<Document<T>>>
+
+// Equality match on serialized bytes (v1-compatible)
+pub async fn find<T>(&self, search: &T) -> Result<Vec<Document<T>>>
+
+// Chainable query builder
+pub fn query<T>(&self) -> QueryBuilder<'_, T, SE, ST>
+```
+
+#### QueryBuilder
+
+```rust
+.filter(|t: &T| -> bool)               // keep only matching documents
+.order_by(|a: &T, b: &T| -> Ordering)  // sort result
+.skip(n: usize)                         // skip first n
+.limit(n: usize)                        // take at most n
+
+// terminals
+.all()   -> Result<Vec<Document<T>>>
+.first() -> Result<Option<Document<T>>>
+.count() -> Result<usize>
+.ids()   -> Result<Vec<Uuid>>
+```
+
+### Update
+
+```rust
+// Replace by id; returns true if found
+pub async fn update_one<T>(&self, id: &Uuid, new_value: T) -> Result<bool>
+
+// Replace all equal to search; returns count
+pub async fn update<T>(&self, search: &T, new_value: &T) -> Result<usize>
+
+// Closure-based bulk update builder
+pub fn update_where<T, F>(&self, predicate: F) -> UpdateWhereBuilder<'_, T, F, SE, ST>
+```
+
+#### UpdateWhereBuilder
+
+```rust
+.limit(n: usize)                        // stop after n updates
+
+// terminals
+.exec(|t: T| -> T)      -> Result<usize>              // returns count
+.returning(|t: T| -> T) -> Result<Vec<Document<T>>>   // returns updated docs
+```
+
+### Delete
+
+```rust
+// Delete by id; returns the removed document
+pub async fn delete_one<T>(&self, id: &Uuid) -> Result<Document<T>>
+
+// Delete all equal to search; returns count
+pub async fn delete<T>(&self, search: &T) -> Result<usize>
+
+// Delete all matching predicate; returns count
+pub async fn delete_where<T, F>(&self, predicate: F) -> Result<usize>
+```
+
+### Transactions
+
+```rust
+pub fn begin(&self) -> Transaction<'_, SE, ST>
+
+// on Transaction:
+.insert_one(value: T)               -> Result<Document<T>>
+.update_one(id: &Uuid, value: T)    -> Result<()>
+.delete_one(id: &Uuid)
+
+.commit()   -> Result<()>   // apply all staged ops atomically
+.rollback()                 // discard all staged ops
+```
+
+### Hash indexes
+
+```rust
+// Build index and keep it current on every write
+pub async fn add_index<T, F>(&self, name: impl Into<String>, key_fn: F) -> Result<()>
+// where F: Fn(&T) -> String
+
+// O(1) lookup by key value
+pub async fn using_index<T>(&self, name: &str, key: &str) -> Result<Vec<Document<T>>>
+```
+
+### Maintenance
+
+```rust
+pub async fn compact(&self) -> Result<()>
+
+pub async fn stats(&self) -> Result<StorageStats>
+// StorageStats { file_size_bytes: u64, live_document_count: usize, compaction_ratio: f64 }
+```
+
+---
+
 ## Cargo.toml
 
 ```toml
@@ -326,6 +451,86 @@ To enable all serializers:
 [dependencies]
 reddb = { version = "2.0", features = ["full"] }
 ```
+
+Run the full test suite:
+
+```bash
+cargo test --all-features
+```
+
+---
+
+## Migrating from v1
+
+### Cargo.toml
+
+```toml
+# Before
+reddb = { version = "0.2", features = ["ron_ser"] }
+
+# After
+reddb = { version = "2.0", features = ["ron_ser"] }
+```
+
+### Opening the database
+
+```rust
+// v1 (sync)
+let db = RonDb::new::<MyType>("mydb").unwrap();
+
+// v2 (async)
+let db = RonDb::new::<MyType>("mydb").await?;
+// or with config:
+let db = RonDb::open::<MyType>(DbConfig::new("mydb")).await?;
+```
+
+### Document fields
+
+```rust
+doc._id  →  doc.id     // renamed
+doc.data →  doc.data   // unchanged
+doc._st  →  removed    // Status is internal; not part of Document<T>
+```
+
+### Queries
+
+```rust
+// v1 — exact byte-match against a fully-constructed value
+let results = db.find(&User { name: "alice".into(), age: 30 }).await?;
+
+// v2 — closure predicate (partial fields, ranges, etc.)
+let results = db.query::<User>()
+    .filter(|u| u.name == "alice")
+    .all()
+    .await?;
+```
+
+### Updates
+
+```rust
+// v1 — replace all that byte-match old_value
+let n = db.update(&old_user, &new_user).await?;
+
+// v2 — closure-based transform
+let n = db
+    .update_where::<User, _>(|u| u.name == "alice")
+    .exec(|mut u| { u.age += 1; u })
+    .await?;
+```
+
+### Deletes
+
+```rust
+// v1
+let n = db.delete(&user).await?;
+
+// v2
+let n = db.delete_where::<User, _>(|u| u.name == "alice").await?;
+```
+
+### File format
+
+v1 and v2 files are **not compatible**. v1 used newline-delimited records (which corrupted binary data); v2 uses length-prefix framing. Delete or rename your v1 database files before opening them with v2.
 
 ---
 
