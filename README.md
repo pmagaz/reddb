@@ -1,6 +1,6 @@
 # RedDB
 
-[![Actions Status](https://github.com/pmagaz/reddb/workflows/build/badge.svg)](https://github.com/pmagaz/reddb/actions) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
+[![CI](https://github.com/pmagaz/reddb/actions/workflows/ci.yml/badge.svg)](https://github.com/pmagaz/reddb/actions/workflows/ci.yml) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
 
 An async, in-memory embedded document database for Rust with optional WAL-based persistence.
 
