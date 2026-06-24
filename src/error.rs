@@ -1,69 +1,86 @@
-use std::fmt::{self, Display};
 use thiserror::Error;
 use uuid::Uuid;
 
-pub type Result<T> = ::anyhow::Result<T, RedDbError>;
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Error)]
-pub enum RedDbErrorKind {
-    //STORAGE
-    #[error("Data corrupted!")]
-    DataCorruption,
-    #[error("Data compacted corrupted!")]
-    Compact,
-    #[error("Could not compact storage")]
-    Storagepersist,
-    #[error("Could not flush data into storage")]
-    FlushData,
-    #[error("Could not flush data")]
-    AppendData,
-    #[error("Could not append data ")]
-    StorageInit,
-    #[error("Could not init storage")]
-    StorageData,
-    #[error("Could not read storage data")]
-    ReadContent,
-    #[error("Could not load storage content")]
-    ContentLoad,
-    #[error("Could not persist data into storage")]
-    Datapersist,
-    // uuids
-    #[error("Could not find _id {_id}")]
-    NotFound { _id: Uuid },
-    #[error("Could not delete _id")]
-    Deletekey,
-    #[error("Could not unlock mutex")]
-    Mutex,
-    #[error("Database poisoned!")]
-    Poisoned,
-    #[error("data poisoned!")]
-    PoisonedValue,
-    // SERDE
-    #[error("Could not deserialize data")]
-    Deserialization,
-    #[error("Could not serialize data")]
-    Serialization,
-}
+pub type Result<T> = std::result::Result<T, RedDbError>;
 
 #[derive(Debug, Error)]
-pub struct RedDbError {
-    err: RedDbErrorKind,
+pub enum RedDbError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("serialization failed: {0}")]
+    Serialize(String),
+
+    #[error("deserialization failed: {0}")]
+    Deserialize(String),
+
+    #[error("document not found: {0}")]
+    NotFound(Uuid),
+
+    #[error("lock poisoned")]
+    LockPoisoned,
+
+    #[error("data corrupted")]
+    DataCorrupted,
+
+    #[error("persistence failed: {0}")]
+    PersistFailed(String),
+
+    #[error("index not found: {0}")]
+    IndexNotFound(String),
 }
 
-impl RedDbError {
-    pub fn kind(&self) -> RedDbErrorKind {
-        self.err
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn not_found_displays_uuid() {
+        let id = Uuid::new_v4();
+        let err = RedDbError::NotFound(id);
+        assert_eq!(err.to_string(), format!("document not found: {}", id));
     }
-}
 
-impl From<RedDbErrorKind> for RedDbError {
-    fn from(kind: RedDbErrorKind) -> RedDbError {
-        RedDbError { err: kind }
+    #[test]
+    fn io_error_converts() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no file");
+        let db_err: RedDbError = io_err.into();
+        assert!(matches!(db_err, RedDbError::Io(_)));
     }
-}
 
-impl Display for RedDbError {
-    fn fmt(&self, err: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.err, err)
+    #[test]
+    fn serialize_error_carries_message() {
+        let err = RedDbError::Serialize("bad format".to_string());
+        assert!(err.to_string().contains("bad format"));
+    }
+
+    #[test]
+    fn deserialize_error_carries_message() {
+        let err = RedDbError::Deserialize("unexpected byte".to_string());
+        assert!(err.to_string().contains("unexpected byte"));
+    }
+
+    #[test]
+    fn lock_poisoned_displays() {
+        let err = RedDbError::LockPoisoned;
+        assert_eq!(err.to_string(), "lock poisoned");
+    }
+
+    #[test]
+    fn data_corrupted_displays() {
+        let err = RedDbError::DataCorrupted;
+        assert_eq!(err.to_string(), "data corrupted");
+    }
+
+    #[test]
+    fn persist_failed_carries_message() {
+        let err = RedDbError::PersistFailed("disk full".to_string());
+        assert!(err.to_string().contains("disk full"));
+    }
+
+    #[test]
+    fn index_not_found_carries_name() {
+        let err = RedDbError::IndexNotFound("by_email".to_string());
+        assert!(err.to_string().contains("by_email"));
     }
 }

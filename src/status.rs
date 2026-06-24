@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+/// Internal WAL operation marker. Never exposed in the public API.
 #[derive(Debug, Clone, Serialize, PartialEq, Deserialize)]
-pub enum Status {
+pub(crate) enum Status {
     In,
     Up,
     De,

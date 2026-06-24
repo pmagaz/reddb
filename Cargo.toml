@@ -1,70 +1,59 @@
 [package]
-name = "reddb"
-version = "0.2.3"
-authors = ["Pablo Magaz <magazpablo@gmail.com>"]
-description = "Minimalistic in-memory embedded database with persistance"
-homepage = "https://github.com/pmagaz/reddb"
-repository = "https://github.com/pmagaz/reddb"
-keywords = ["database", "db", "async", "store", "embedded"]
-categories = ["database","database-implementations", "asynchronous"]
-documentation = "https://docs.rs/RedDb"
-edition = "2018"
-readme = "README.md"
-license = "MIT OR Apache-2.0"
-exclude =  ["tests", ".github", ".gitignore", "examples"]
+name        = "reddb"
+version     = "2.0.0"
+authors     = ["Pablo Magaz <magazpablo@gmail.com>"]
+description = "Minimalistic async in-memory embedded document database with closure-based queries and optional persistence"
+homepage    = "https://github.com/pmagaz/reddb"
+repository  = "https://github.com/pmagaz/reddb"
+keywords    = ["database", "db", "async", "store", "embedded"]
+categories  = ["database", "database-implementations", "asynchronous"]
+documentation = "https://docs.rs/reddb"
+edition     = "2021"
+readme      = "README.md"
+license     = "MIT OR Apache-2.0"
+exclude     = ["tests", ".github", ".gitignore", "examples"]
 
 [lib]
 name = "reddb"
 path = "src/lib.rs"
 
-
 [dependencies]
-uuid = { version = "0.8.1", features = ["serde", "v4"] }
-anyhow = "1.0.38"
-thiserror = "1.0.24"
-tokio = { version = "0.2", features = ["macros","fs","stream","sync","rt-util"] }
-serde = { version = "1.0", features = ["derive"] }
-futures = "0.3.8"
-async-trait = "0.1.42"
-
-[package.metadata.docs.rs]
-all-features = true
+uuid        = { version = "1",   features = ["serde", "v4"] }
+anyhow      = "1"
+thiserror   = "1"
+tokio       = { version = "1",   features = ["macros", "fs", "sync", "rt-multi-thread", "io-util"] }
+serde       = { version = "1",   features = ["derive"] }
+async-trait = "0.1"
 
 [dependencies.serde_json]
 optional = true
-version = "1.0.61"
+version  = "1"
 
 [dependencies.ron]
 optional = true
-version = "0.6.4"
+version  = "0.8"
 
 [dependencies.serde_yaml]
 optional = true
-version = "0.8.14"
+version  = "0.9"
 
 [dependencies.bincode]
 optional = true
-version = "1.3.1"
-
-[dependencies.base64]
-optional = false
-version = "0.13.0"
+version  = "1"
 
 [features]
-default = []
-bin_ser = ["bincode"]
+default  = []
+bin_ser  = ["bincode"]
 json_ser = ["serde_json"]
-ron_ser = ["ron"]
+ron_ser  = ["ron"]
 yaml_ser = ["serde_yaml"]
-#grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
+full     = ["bin_ser", "json_ser", "ron_ser", "yaml_ser"]
 
 [dev-dependencies]
-grcov = "0.6.1"
-tokio-test = "0.4.0"
+tokio-test = "0.4"
+tempfile   = "3"
+criterion  = { version = "0.5", features = ["async_tokio"] }
 
-[dev-dependencies.cargo-husky]
-version = "1"
-default-features = false 
-features = ["prepush-hook", "run-cargo-fmt", "run-cargo-clippy"]
-
-
+[[bench]]
+name    = "basic"
+harness = false
