@@ -29,7 +29,10 @@ where
     for<'de> ST: Storage + Debug + Send + Sync,
 {
     pub(crate) fn new(db: &'db RedDb<SE, ST>) -> Self {
-        Self { db, ops: Vec::new() }
+        Self {
+            db,
+            ops: Vec::new(),
+        }
     }
 
     /// Stage an insert — assigns a UUID and serializes `value`.
@@ -77,7 +80,10 @@ where
                 match op {
                     WalOp::Insert => {
                         data.insert(*id, new_raw.clone());
-                        changes.push(IndexChange::Insert { id: *id, raw: new_raw.clone() });
+                        changes.push(IndexChange::Insert {
+                            id: *id,
+                            raw: new_raw.clone(),
+                        });
                     }
                     WalOp::Update => {
                         let old_raw = data.get(id).cloned().unwrap_or_default();
@@ -90,7 +96,10 @@ where
                     }
                     WalOp::Delete => {
                         let old_raw = data.remove(id).unwrap_or_default();
-                        changes.push(IndexChange::Delete { id: *id, raw: old_raw });
+                        changes.push(IndexChange::Delete {
+                            id: *id,
+                            raw: old_raw,
+                        });
                     }
                 }
             }
@@ -103,9 +112,11 @@ where
             for change in &index_changes {
                 match change {
                     IndexChange::Insert { id, raw } => registry.on_insert(*id, raw),
-                    IndexChange::Update { id, old_raw, new_raw } => {
-                        registry.on_update(*id, old_raw, new_raw)
-                    }
+                    IndexChange::Update {
+                        id,
+                        old_raw,
+                        new_raw,
+                    } => registry.on_update(*id, old_raw, new_raw),
                     IndexChange::Delete { id, raw } => registry.on_delete(*id, raw),
                 }
             }
@@ -120,9 +131,19 @@ where
 }
 
 enum IndexChange {
-    Insert { id: Uuid, raw: Vec<u8> },
-    Update { id: Uuid, old_raw: Vec<u8>, new_raw: Vec<u8> },
-    Delete { id: Uuid, raw: Vec<u8> },
+    Insert {
+        id: Uuid,
+        raw: Vec<u8>,
+    },
+    Update {
+        id: Uuid,
+        old_raw: Vec<u8>,
+        new_raw: Vec<u8>,
+    },
+    Delete {
+        id: Uuid,
+        raw: Vec<u8>,
+    },
 }
 
 #[cfg(test)]

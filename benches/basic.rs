@@ -10,7 +10,10 @@ struct Record {
 }
 
 fn record(n: u32) -> Record {
-    Record { id: n, value: format!("value_{n}") }
+    Record {
+        id: n,
+        value: format!("value_{n}"),
+    }
 }
 
 // ── insert ────────────────────────────────────────────────────────────────────
@@ -57,9 +60,8 @@ fn bench_find_all(c: &mut Criterion) {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &size| {
             let db = rt.block_on(seeded(size));
-            b.to_async(&rt).iter(|| async {
-                db.find_all::<Record>().await.unwrap()
-            });
+            b.to_async(&rt)
+                .iter(|| async { db.find_all::<Record>().await.unwrap() });
         });
     }
     group.finish();
@@ -90,12 +92,15 @@ fn bench_update_one(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     c.bench_function("update_one", |b| {
         let db = rt.block_on(seeded(100));
-        let ids: Vec<_> = rt.block_on(db.find_all::<Record>()).unwrap()
-            .into_iter().map(|d| d.id).collect();
+        let ids: Vec<_> = rt
+            .block_on(db.find_all::<Record>())
+            .unwrap()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
         let target = ids[0];
-        b.to_async(&rt).iter(|| async {
-            db.update_one(&target, record(999)).await.unwrap()
-        });
+        b.to_async(&rt)
+            .iter(|| async { db.update_one(&target, record(999)).await.unwrap() });
     });
 }
 
@@ -122,12 +127,13 @@ fn bench_index_lookup(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &size| {
             let db = rt.block_on(async {
                 let db = seeded(size).await;
-                db.add_index::<Record, _>("by_id", |r| r.id.to_string()).await.unwrap();
+                db.add_index::<Record, _>("by_id", |r| r.id.to_string())
+                    .await
+                    .unwrap();
                 db
             });
-            b.to_async(&rt).iter(|| async {
-                db.using_index::<Record>("by_id", "50").await.unwrap()
-            });
+            b.to_async(&rt)
+                .iter(|| async { db.using_index::<Record>("by_id", "50").await.unwrap() });
         });
     }
     group.finish();

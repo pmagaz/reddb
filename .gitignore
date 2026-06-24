@@ -1,11 +1,32 @@
+# Build output
 /target
 /pkg
-.cache
-wasm-pack.log
-*.db.*
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Rust
 **/*.rs.bk
+Cargo.lock
+
+# Database files created during tests
+*.db.*
 *.ron
 *.yaml
 *.json
+*.bin
+
+# Tooling
+.cache
+wasm-pack.log
+
+# Claude
 CLAUDE.md
 .claude/

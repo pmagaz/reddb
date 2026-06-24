@@ -35,7 +35,12 @@ where
     for<'de> T: Serialize + Deserialize<'de> + Debug + Clone + PartialEq + Send + Sync,
 {
     pub(crate) fn new(db: &'db RedDb<SE, ST>, predicate: F) -> Self {
-        Self { db, predicate, limit: None, _marker: PhantomData }
+        Self {
+            db,
+            predicate,
+            limit: None,
+            _marker: PhantomData,
+        }
     }
 
     /// Stop after updating at most `n` documents.
@@ -85,7 +90,8 @@ where
                 return Ok(Vec::new());
             }
 
-            let docs: Vec<Document<T>> = updates.iter()
+            let docs: Vec<Document<T>> = updates
+                .iter()
                 .map(|(id, _, _, v)| Document::new(*id, v.clone()))
                 .collect();
             self.db.storage_persist(&docs, WalOp::Update).await?;
@@ -121,7 +127,8 @@ where
                 updated
             };
 
-            let docs: Vec<Document<T>> = updated.iter()
+            let docs: Vec<Document<T>> = updated
+                .iter()
                 .map(|(id, _, _, v)| Document::new(*id, v.clone()))
                 .collect();
 
@@ -151,18 +158,17 @@ mod tests {
     }
 
     fn item(name: &str, score: u32) -> Item {
-        Item { name: name.into(), score }
+        Item {
+            name: name.into(),
+            score,
+        }
     }
 
     async fn seeded_db() -> MemDb {
         let db = MemDb::new::<Item>("_").await.unwrap();
-        db.insert(vec![
-            item("alpha", 10),
-            item("beta",  20),
-            item("gamma", 30),
-        ])
-        .await
-        .unwrap();
+        db.insert(vec![item("alpha", 10), item("beta", 20), item("gamma", 30)])
+            .await
+            .unwrap();
         db
     }
 
@@ -171,12 +177,20 @@ mod tests {
         let db = seeded_db().await;
         let count = db
             .update_where::<Item, _>(|i| i.score >= 20)
-            .exec(|mut i| { i.score += 5; i })
+            .exec(|mut i| {
+                i.score += 5;
+                i
+            })
             .await
             .unwrap();
         assert_eq!(count, 2);
 
-        let all = db.query::<Item>().order_by(|a, b| a.score.cmp(&b.score)).all().await.unwrap();
+        let all = db
+            .query::<Item>()
+            .order_by(|a, b| a.score.cmp(&b.score))
+            .all()
+            .await
+            .unwrap();
         assert_eq!(all[0].data.score, 10); // alpha unchanged
         assert_eq!(all[1].data.score, 25); // beta: 20+5
         assert_eq!(all[2].data.score, 35); // gamma: 30+5
@@ -198,7 +212,10 @@ mod tests {
         let db = seeded_db().await;
         let docs = db
             .update_where::<Item, _>(|i| i.name == "alpha")
-            .returning(|mut i| { i.name = "ALPHA".into(); i })
+            .returning(|mut i| {
+                i.name = "ALPHA".into();
+                i
+            })
             .await
             .unwrap();
         assert_eq!(docs.len(), 1);
@@ -214,12 +231,20 @@ mod tests {
         let count = db
             .update_where::<Item, _>(|i| i.score >= 10)
             .limit(2)
-            .exec(|mut i| { i.score = 0; i })
+            .exec(|mut i| {
+                i.score = 0;
+                i
+            })
             .await
             .unwrap();
         assert_eq!(count, 2);
 
-        let zeroed = db.query::<Item>().filter(|i| i.score == 0).count().await.unwrap();
+        let zeroed = db
+            .query::<Item>()
+            .filter(|i| i.score == 0)
+            .count()
+            .await
+            .unwrap();
         assert_eq!(zeroed, 2);
     }
 }
