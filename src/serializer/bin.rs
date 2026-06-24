@@ -42,7 +42,10 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let s = S { x: 5, name: "hello".into() };
+        let s = S {
+            x: 5,
+            name: "hello".into(),
+        };
         let ser = Bin.serialize(&s).unwrap();
         let de: S = Bin.deserialize(&ser).unwrap();
         assert_eq!(de, s);
@@ -51,7 +54,10 @@ mod tests {
     #[test]
     fn binary_payload_with_newline_byte_round_trips() {
         // Payload containing 0x0A (newline) — this was the v1 bug.
-        let s = S { x: 10, name: "\nhidden\n".into() };
+        let s = S {
+            x: 10,
+            name: "\nhidden\n".into(),
+        };
         let ser = Bin.serialize(&s).unwrap();
         let de: S = Bin.deserialize(&ser).unwrap();
         assert_eq!(de, s);
@@ -59,7 +65,10 @@ mod tests {
 
     #[test]
     fn no_trailing_newline() {
-        let s = S { x: 1, name: "x".into() };
+        let s = S {
+            x: 1,
+            name: "x".into(),
+        };
         let bytes = Bin.serialize(&s).unwrap();
         assert_ne!(bytes.last().copied(), Some(b'\n'));
     }
