@@ -48,6 +48,7 @@ json_ser = ["serde_json"]
 ron_ser  = ["ron"]
 yaml_ser = ["serde_yaml"]
 full     = ["bin_ser", "json_ser", "ron_ser", "yaml_ser"]
+migrate  = []
 
 [dev-dependencies]
 tokio-test = "0.4"
