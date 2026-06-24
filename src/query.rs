@@ -15,6 +15,7 @@ use uuid::Uuid;
 ///
 /// Build the query with `.filter()`, `.order_by()`, `.skip()`, `.limit()`,
 /// then execute with `.all()`, `.first()`, `.count()`, or `.ids()`.
+#[allow(clippy::type_complexity)]
 pub struct QueryBuilder<'db, T, SE, ST> {
     db: &'db RedDb<SE, ST>,
     filter: Option<Box<dyn Fn(&T) -> bool + Send + Sync + 'static>>,
@@ -138,14 +139,17 @@ mod tests {
     }
 
     fn item(name: &str, score: u32) -> Item {
-        Item { name: name.into(), score }
+        Item {
+            name: name.into(),
+            score,
+        }
     }
 
     async fn seeded_db() -> MemDb {
         let db = MemDb::new::<Item>("_").await.unwrap();
         db.insert(vec![
             item("alpha", 10),
-            item("beta",  20),
+            item("beta", 20),
             item("gamma", 30),
             item("delta", 20),
         ])
@@ -164,7 +168,12 @@ mod tests {
     #[tokio::test]
     async fn filter_returns_matching_docs() {
         let db = seeded_db().await;
-        let results = db.query::<Item>().filter(|i| i.score == 20).all().await.unwrap();
+        let results = db
+            .query::<Item>()
+            .filter(|i| i.score == 20)
+            .all()
+            .await
+            .unwrap();
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|d| d.data.score == 20));
     }
@@ -172,7 +181,12 @@ mod tests {
     #[tokio::test]
     async fn filter_excludes_non_matching() {
         let db = seeded_db().await;
-        let results = db.query::<Item>().filter(|i| i.score > 100).all().await.unwrap();
+        let results = db
+            .query::<Item>()
+            .filter(|i| i.score > 100)
+            .all()
+            .await
+            .unwrap();
         assert!(results.is_empty());
     }
 
@@ -262,14 +276,24 @@ mod tests {
     #[tokio::test]
     async fn count_returns_correct_number() {
         let db = seeded_db().await;
-        let n = db.query::<Item>().filter(|i| i.score >= 20).count().await.unwrap();
+        let n = db
+            .query::<Item>()
+            .filter(|i| i.score >= 20)
+            .count()
+            .await
+            .unwrap();
         assert_eq!(n, 3);
     }
 
     #[tokio::test]
     async fn ids_returns_uuids_only() {
         let db = seeded_db().await;
-        let ids = db.query::<Item>().filter(|i| i.score == 10).ids().await.unwrap();
+        let ids = db
+            .query::<Item>()
+            .filter(|i| i.score == 10)
+            .ids()
+            .await
+            .unwrap();
         assert_eq!(ids.len(), 1);
         // Verify UUID is valid (not zeroed)
         assert_ne!(ids[0], Uuid::nil());

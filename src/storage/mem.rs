@@ -21,6 +21,7 @@ impl Storage for MemStorage {
         Ok(MemStorage)
     }
 
+    #[allow(clippy::extra_unused_type_parameters)]
     async fn load<T>(&self) -> Result<RedDbHM>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,

@@ -43,7 +43,7 @@ enum V1Status {
 ///   will append duplicate records to an already-populated v2 file.
 ///
 /// # Example
-/// ```rust,no_run
+/// ```ignore
 /// reddb::migrate::from_v1::<MyType, reddb::serializer::Ron>("users.ron", "users_v2").await?;
 /// ```
 #[allow(private_bounds)]

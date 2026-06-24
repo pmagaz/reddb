@@ -272,7 +272,7 @@ where
     /// per live document. No-op for [`MemStorage`].
     pub async fn compact(&self) -> Result<()> {
         let data = self.data.read().await;
-        self.storage.compact(&*data).await
+        self.storage.compact(&data).await
     }
 
     /// Return a snapshot of storage statistics.
@@ -383,11 +383,15 @@ where
         let doc = Document::new(id, value);
 
         if self.write_order == WriteOrder::FileFirst {
-            self.storage.persist(&[doc.clone()], WalOp::Insert).await?;
+            self.storage
+                .persist(std::slice::from_ref(&doc), WalOp::Insert)
+                .await?;
         }
         self.write_lock().await?.insert(id, raw.clone());
         if self.write_order == WriteOrder::MemoryFirst {
-            self.storage.persist(&[doc.clone()], WalOp::Insert).await?;
+            self.storage
+                .persist(std::slice::from_ref(&doc), WalOp::Insert)
+                .await?;
         }
         self.index_on_insert(id, &raw).await;
         Ok(doc)
@@ -459,7 +463,9 @@ where
             let mut data = self.write_lock().await?;
             if let Some(entry) = data.get_mut(id) {
                 let old_raw = entry.clone();
-                self.storage.persist(&[doc.clone()], WalOp::Update).await?;
+                self.storage
+                    .persist(std::slice::from_ref(&doc), WalOp::Update)
+                    .await?;
                 *entry = new_raw.clone();
                 drop(data);
                 self.index_on_update(*id, &old_raw, &new_raw).await;
@@ -497,7 +503,9 @@ where
             let raw = data.get(id).ok_or(RedDbError::NotFound(*id))?.clone();
             let value: T = self.deserialize(&raw)?;
             let doc = Document::new(*id, value);
-            self.storage.persist(&[doc.clone()], WalOp::Delete).await?;
+            self.storage
+                .persist(std::slice::from_ref(&doc), WalOp::Delete)
+                .await?;
             data.remove(id);
             drop(data);
             self.index_on_delete(*id, &raw).await;
@@ -509,7 +517,9 @@ where
                 let value = self.deserialize(&raw)?;
                 (Document::new(*id, value), raw)
             };
-            self.storage.persist(&[doc.clone()], WalOp::Delete).await?;
+            self.storage
+                .persist(std::slice::from_ref(&doc), WalOp::Delete)
+                .await?;
             self.index_on_delete(*id, &raw).await;
             Ok(doc)
         }

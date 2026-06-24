@@ -11,14 +11,9 @@ pub(crate) struct IndexEntry {
     pub(crate) keys: HashMap<String, Vec<Uuid>>,
 }
 
+#[derive(Default)]
 pub(crate) struct IndexRegistry {
     pub(crate) entries: HashMap<String, IndexEntry>,
-}
-
-impl Default for IndexRegistry {
-    fn default() -> Self {
-        IndexRegistry { entries: HashMap::new() }
-    }
 }
 
 impl IndexRegistry {

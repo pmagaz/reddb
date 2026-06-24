@@ -145,6 +145,7 @@ where
         Ok(storage)
     }
 
+    #[allow(clippy::extra_unused_type_parameters)]
     async fn load<T>(&self) -> Result<RedDbHM>
     where
         for<'de> T: Serialize + Deserialize<'de> + Debug + PartialEq + Send + Sync,
@@ -152,7 +153,7 @@ where
         let (map, file_size) = {
             let mut file = self.db_file.lock().await;
             let file_size = file.metadata().await?.len();
-            let records = read_records(&mut *file).await?;
+            let records = read_records(&mut file).await?;
             let mut map: RedDbHM = HashMap::new();
             for (op, id, payload) in records {
                 if op == WalOp::Delete {
@@ -185,7 +186,7 @@ where
                     .serialize(&doc.data)
                     .map_err(|e| RedDbError::Serialize(e.to_string()))?
             };
-            write_record(&mut *file, op, doc.id, &payload).await?;
+            write_record(&mut file, op, doc.id, &payload).await?;
         }
         file.sync_data().await?;
         Ok(())
@@ -218,7 +219,7 @@ where
     async fn persist_raw(&self, records: &[(WalOp, Uuid, Vec<u8>)]) -> Result<()> {
         let mut file = self.db_file.lock().await;
         for (op, id, payload) in records {
-            write_record(&mut *file, *op, *id, payload).await?;
+            write_record(&mut file, *op, *id, payload).await?;
         }
         file.sync_data().await?;
         Ok(())
