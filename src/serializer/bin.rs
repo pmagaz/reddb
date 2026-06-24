@@ -15,16 +15,15 @@ impl Serializer for Bin {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        // No delimiter appended — length-prefix framing handles record
-        // boundaries in the storage layer.
-        Ok(bincode::serialize(data)?)
+        Ok(bincode::serde::encode_to_vec(data, bincode::config::standard())?)
     }
 
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        Ok(bincode::deserialize(data)?)
+        let (val, _) = bincode::serde::decode_from_slice(data, bincode::config::standard())?;
+        Ok(val)
     }
 }
 
