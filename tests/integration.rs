@@ -28,7 +28,9 @@ async fn insert_one_survives_reopen() {
     let inserted_id = {
         let db = RonDb::new::<TestStruct>(".it_insert_one").await.unwrap();
         let doc = db
-            .insert_one(TestStruct { foo: "persist_me".into() })
+            .insert_one(TestStruct {
+                foo: "persist_me".into(),
+            })
             .await
             .unwrap();
         doc.id
@@ -50,9 +52,13 @@ async fn insert_many_survives_reopen() {
     let ids: Vec<_> = {
         let db = RonDb::new::<TestStruct>(".it_insert_many").await.unwrap();
         db.insert(vec![
-            TestStruct { foo: "alpha".into() },
+            TestStruct {
+                foo: "alpha".into(),
+            },
             TestStruct { foo: "beta".into() },
-            TestStruct { foo: "gamma".into() },
+            TestStruct {
+                foo: "gamma".into(),
+            },
         ])
         .await
         .unwrap()
@@ -81,12 +87,19 @@ async fn update_one_survives_reopen() {
     let id = {
         let db = RonDb::new::<TestStruct>(".it_update_one").await.unwrap();
         let doc = db
-            .insert_one(TestStruct { foo: "original".into() })
+            .insert_one(TestStruct {
+                foo: "original".into(),
+            })
             .await
             .unwrap();
-        db.update_one(&doc.id, TestStruct { foo: "updated".into() })
-            .await
-            .unwrap();
+        db.update_one(
+            &doc.id,
+            TestStruct {
+                foo: "updated".into(),
+            },
+        )
+        .await
+        .unwrap();
         doc.id
     };
 
@@ -102,15 +115,21 @@ async fn update_many_survives_reopen() {
     let file = ".it_update_many.ron";
     cleanup(file);
 
-    let search = TestStruct { foo: "search".into() };
-    let replacement = TestStruct { foo: "replaced".into() };
+    let search = TestStruct {
+        foo: "search".into(),
+    };
+    let replacement = TestStruct {
+        foo: "replaced".into(),
+    };
 
     {
         let db = RonDb::new::<TestStruct>(".it_update_many").await.unwrap();
         db.insert(vec![
             search.clone(),
             search.clone(),
-            TestStruct { foo: "other".into() },
+            TestStruct {
+                foo: "other".into(),
+            },
         ])
         .await
         .unwrap();
@@ -121,7 +140,12 @@ async fn update_many_survives_reopen() {
     let db2 = RonDb::new::<TestStruct>(".it_update_many").await.unwrap();
     let replaced = db2.find(&replacement).await.unwrap();
     assert_eq!(replaced.len(), 2);
-    let untouched = db2.find(&TestStruct { foo: "other".into() }).await.unwrap();
+    let untouched = db2
+        .find(&TestStruct {
+            foo: "other".into(),
+        })
+        .await
+        .unwrap();
     assert_eq!(untouched.len(), 1);
 
     cleanup(file);
@@ -137,7 +161,9 @@ async fn delete_one_survives_reopen() {
     let id = {
         let db = RonDb::new::<TestStruct>(".it_delete_one").await.unwrap();
         let doc = db
-            .insert_one(TestStruct { foo: "to_delete".into() })
+            .insert_one(TestStruct {
+                foo: "to_delete".into(),
+            })
             .await
             .unwrap();
         db.delete_one::<TestStruct>(&doc.id).await.unwrap();
@@ -156,8 +182,12 @@ async fn delete_many_survives_reopen() {
     let file = ".it_delete_many.ron";
     cleanup(file);
 
-    let target = TestStruct { foo: "remove_me".into() };
-    let keep = TestStruct { foo: "keep_me".into() };
+    let target = TestStruct {
+        foo: "remove_me".into(),
+    };
+    let keep = TestStruct {
+        foo: "keep_me".into(),
+    };
 
     {
         let db = RonDb::new::<TestStruct>(".it_delete_many").await.unwrap();
@@ -182,11 +212,23 @@ async fn delete_many_survives_reopen() {
 async fn memdb_basic_crud() {
     let db = MemDb::new::<TestStruct>("unused").await.unwrap();
 
-    let doc = db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap();
+    let doc = db
+        .insert_one(TestStruct {
+            foo: "hello".into(),
+        })
+        .await
+        .unwrap();
     let found: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
     assert_eq!(found.data.foo, "hello");
 
-    db.update_one(&doc.id, TestStruct { foo: "world".into() }).await.unwrap();
+    db.update_one(
+        &doc.id,
+        TestStruct {
+            foo: "world".into(),
+        },
+    )
+    .await
+    .unwrap();
     let updated: Document<TestStruct> = db.find_one(&doc.id).await.unwrap();
     assert_eq!(updated.data.foo, "world");
 
@@ -201,7 +243,11 @@ async fn memdb_leaves_no_files() {
     let _ = fs::remove_file(format!("{}.bin", stem));
 
     let db = MemDb::new::<TestStruct>(stem).await.unwrap();
-    db.insert_one(TestStruct { foo: "ephemeral".into() }).await.unwrap();
+    db.insert_one(TestStruct {
+        foo: "ephemeral".into(),
+    })
+    .await
+    .unwrap();
     drop(db);
 
     assert!(!std::path::Path::new(&format!("{}.bin", stem)).exists());
@@ -210,7 +256,9 @@ async fn memdb_leaves_no_files() {
 #[tokio::test]
 async fn memdb_does_not_persist_across_reopen() {
     let db1 = MemDb::new::<TestStruct>("memdb_ephemeral").await.unwrap();
-    db1.insert_one(TestStruct { foo: "gone".into() }).await.unwrap();
+    db1.insert_one(TestStruct { foo: "gone".into() })
+        .await
+        .unwrap();
     drop(db1);
 
     let db2 = MemDb::new::<TestStruct>("memdb_ephemeral").await.unwrap();
@@ -297,10 +345,20 @@ async fn query_count_and_ids() {
     .await
     .unwrap();
 
-    let count = db.query::<TestStruct>().filter(|t| t.foo == "yes").count().await.unwrap();
+    let count = db
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "yes")
+        .count()
+        .await
+        .unwrap();
     assert_eq!(count, 2);
 
-    let ids = db.query::<TestStruct>().filter(|t| t.foo == "yes").ids().await.unwrap();
+    let ids = db
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "yes")
+        .ids()
+        .await
+        .unwrap();
     assert_eq!(ids.len(), 2);
 
     cleanup(file);
@@ -316,23 +374,40 @@ async fn update_where_exec_survives_reopen() {
     {
         let db = RonDb::new::<TestStruct>(".it_update_where").await.unwrap();
         db.insert(vec![
-            TestStruct { foo: "change_me".into() },
-            TestStruct { foo: "change_me".into() },
+            TestStruct {
+                foo: "change_me".into(),
+            },
+            TestStruct {
+                foo: "change_me".into(),
+            },
             TestStruct { foo: "keep".into() },
         ])
         .await
         .unwrap();
         let n = db
             .update_where::<TestStruct, _>(|t| t.foo == "change_me")
-            .exec(|mut t| { t.foo = "changed".into(); t })
+            .exec(|mut t| {
+                t.foo = "changed".into();
+                t
+            })
             .await
             .unwrap();
         assert_eq!(n, 2);
     }
 
     let db2 = RonDb::new::<TestStruct>(".it_update_where").await.unwrap();
-    let changed = db2.query::<TestStruct>().filter(|t| t.foo == "changed").count().await.unwrap();
-    let kept = db2.query::<TestStruct>().filter(|t| t.foo == "keep").count().await.unwrap();
+    let changed = db2
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "changed")
+        .count()
+        .await
+        .unwrap();
+    let kept = db2
+        .query::<TestStruct>()
+        .filter(|t| t.foo == "keep")
+        .count()
+        .await
+        .unwrap();
     assert_eq!(changed, 2);
     assert_eq!(kept, 1);
 
@@ -344,12 +419,21 @@ async fn update_where_returning_gives_new_state() {
     let file = ".it_update_where_ret.ron";
     cleanup(file);
 
-    let db = RonDb::new::<TestStruct>(".it_update_where_ret").await.unwrap();
-    db.insert_one(TestStruct { foo: "before".into() }).await.unwrap();
+    let db = RonDb::new::<TestStruct>(".it_update_where_ret")
+        .await
+        .unwrap();
+    db.insert_one(TestStruct {
+        foo: "before".into(),
+    })
+    .await
+    .unwrap();
 
     let docs = db
         .update_where::<TestStruct, _>(|t| t.foo == "before")
-        .returning(|mut t| { t.foo = "after".into(); t })
+        .returning(|mut t| {
+            t.foo = "after".into();
+            t
+        })
         .await
         .unwrap();
 
@@ -372,13 +456,20 @@ async fn delete_where_survives_reopen() {
     {
         let db = RonDb::new::<TestStruct>(".it_delete_where").await.unwrap();
         db.insert(vec![
-            TestStruct { foo: "remove".into() },
-            TestStruct { foo: "remove".into() },
+            TestStruct {
+                foo: "remove".into(),
+            },
+            TestStruct {
+                foo: "remove".into(),
+            },
             TestStruct { foo: "keep".into() },
         ])
         .await
         .unwrap();
-        let n = db.delete_where::<TestStruct, _>(|t| t.foo == "remove").await.unwrap();
+        let n = db
+            .delete_where::<TestStruct, _>(|t| t.foo == "remove")
+            .await
+            .unwrap();
         assert_eq!(n, 2);
     }
 
@@ -400,10 +491,7 @@ async fn compaction_produces_correct_state() {
     {
         let db = RonDb::new::<TestStruct>(".it_compaction").await.unwrap();
         // Three inserts + one delete = net two live docs
-        let a = db
-            .insert_one(TestStruct { foo: "a".into() })
-            .await
-            .unwrap();
+        let a = db.insert_one(TestStruct { foo: "a".into() }).await.unwrap();
         let _b = db.insert_one(TestStruct { foo: "b".into() }).await.unwrap();
         let _c = db.insert_one(TestStruct { foo: "c".into() }).await.unwrap();
         db.delete_one::<TestStruct>(&a.id).await.unwrap();
@@ -427,11 +515,10 @@ async fn manual_compact_shrinks_file() {
 
     // Use a high ratio so auto-compaction on reopen doesn't fire (we want to
     // test the explicit compact() call, not the automatic one).
-    let db: RonDb = RonDb::open::<TestStruct>(
-        DbConfig::new(".it_manual_compact").compaction_ratio(100.0),
-    )
-    .await
-    .unwrap();
+    let db: RonDb =
+        RonDb::open::<TestStruct>(DbConfig::new(".it_manual_compact").compaction_ratio(100.0))
+            .await
+            .unwrap();
 
     let docs = db
         .insert(vec![
@@ -447,7 +534,10 @@ async fn manual_compact_shrinks_file() {
     let size_before = db.stats().await.unwrap().file_size_bytes;
     db.compact().await.unwrap();
     let size_after = db.stats().await.unwrap().file_size_bytes;
-    assert!(size_after < size_before, "size_after={size_after} size_before={size_before}");
+    assert!(
+        size_after < size_before,
+        "size_after={size_after} size_before={size_before}"
+    );
 
     let all = db.find_all::<TestStruct>().await.unwrap();
     assert_eq!(all.len(), 1);
@@ -487,7 +577,11 @@ async fn storage_stats_file_size_grows() {
     let db = RonDb::new::<TestStruct>(".it_stats_size").await.unwrap();
     let s0 = db.stats().await.unwrap();
 
-    db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap();
+    db.insert_one(TestStruct {
+        foo: "hello".into(),
+    })
+    .await
+    .unwrap();
     let s1 = db.stats().await.unwrap();
 
     assert!(s1.file_size_bytes > s0.file_size_bytes);
@@ -510,7 +604,9 @@ async fn file_first_insert_persists_across_reopen() {
         .await
         .unwrap();
         let doc = db
-            .insert_one(TestStruct { foo: "file_first".into() })
+            .insert_one(TestStruct {
+                foo: "file_first".into(),
+            })
             .await
             .unwrap();
         doc.id
@@ -536,8 +632,12 @@ async fn file_first_update_where_persists_across_reopen() {
         .await
         .unwrap();
         db.insert(vec![
-            TestStruct { foo: "before".into() },
-            TestStruct { foo: "other".into() },
+            TestStruct {
+                foo: "before".into(),
+            },
+            TestStruct {
+                foo: "other".into(),
+            },
         ])
         .await
         .unwrap();
@@ -573,11 +673,26 @@ async fn transaction_commit_survives_reopen() {
 
     let (inserted_id, updated_id) = {
         let db = RonDb::new::<TestStruct>(".it_tx_commit").await.unwrap();
-        let existing = db.insert_one(TestStruct { foo: "original".into() }).await.unwrap();
+        let existing = db
+            .insert_one(TestStruct {
+                foo: "original".into(),
+            })
+            .await
+            .unwrap();
 
         let mut tx = db.begin();
-        let new_doc = tx.insert_one(TestStruct { foo: "tx_insert".into() }).unwrap();
-        tx.update_one(&existing.id, TestStruct { foo: "tx_update".into() }).unwrap();
+        let new_doc = tx
+            .insert_one(TestStruct {
+                foo: "tx_insert".into(),
+            })
+            .unwrap();
+        tx.update_one(
+            &existing.id,
+            TestStruct {
+                foo: "tx_update".into(),
+            },
+        )
+        .unwrap();
         tx.commit().await.unwrap();
 
         (new_doc.id, existing.id)
@@ -595,11 +710,25 @@ async fn transaction_commit_survives_reopen() {
 #[tokio::test]
 async fn transaction_rollback_leaves_state_unchanged() {
     let db = MemDb::new::<TestStruct>("unused").await.unwrap();
-    let doc = db.insert_one(TestStruct { foo: "original".into() }).await.unwrap();
+    let doc = db
+        .insert_one(TestStruct {
+            foo: "original".into(),
+        })
+        .await
+        .unwrap();
 
     let mut tx = db.begin();
-    tx.insert_one(TestStruct { foo: "phantom".into() }).unwrap();
-    tx.update_one(&doc.id, TestStruct { foo: "changed".into() }).unwrap();
+    tx.insert_one(TestStruct {
+        foo: "phantom".into(),
+    })
+    .unwrap();
+    tx.update_one(
+        &doc.id,
+        TestStruct {
+            foo: "changed".into(),
+        },
+    )
+    .unwrap();
     tx.rollback();
 
     let all = db.find_all::<TestStruct>().await.unwrap();
@@ -614,8 +743,18 @@ async fn transaction_delete_survives_reopen() {
 
     let keep_id = {
         let db = RonDb::new::<TestStruct>(".it_tx_delete").await.unwrap();
-        let d1 = db.insert_one(TestStruct { foo: "delete_me".into() }).await.unwrap();
-        let d2 = db.insert_one(TestStruct { foo: "keep_me".into() }).await.unwrap();
+        let d1 = db
+            .insert_one(TestStruct {
+                foo: "delete_me".into(),
+            })
+            .await
+            .unwrap();
+        let d2 = db
+            .insert_one(TestStruct {
+                foo: "keep_me".into(),
+            })
+            .await
+            .unwrap();
 
         let mut tx = db.begin();
         tx.delete_one(&d1.id);
@@ -651,10 +790,18 @@ macro_rules! serializer_round_trip_tests {
                 cleanup(file);
                 let id = {
                     let db = $DbType::new::<TestStruct>(stem).await.unwrap();
-                    db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap().id
+                    db.insert_one(TestStruct {
+                        foo: "hello".into(),
+                    })
+                    .await
+                    .unwrap()
+                    .id
                 };
                 let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
-                assert_eq!(db2.find_one::<TestStruct>(&id).await.unwrap().data.foo, "hello");
+                assert_eq!(
+                    db2.find_one::<TestStruct>(&id).await.unwrap().data.foo,
+                    "hello"
+                );
                 cleanup(file);
             }
 
@@ -665,12 +812,20 @@ macro_rules! serializer_round_trip_tests {
                 cleanup(file);
                 let id = {
                     let db = $DbType::new::<TestStruct>(stem).await.unwrap();
-                    let doc = db.insert_one(TestStruct { foo: "old".into() }).await.unwrap();
-                    db.update_one(&doc.id, TestStruct { foo: "new".into() }).await.unwrap();
+                    let doc = db
+                        .insert_one(TestStruct { foo: "old".into() })
+                        .await
+                        .unwrap();
+                    db.update_one(&doc.id, TestStruct { foo: "new".into() })
+                        .await
+                        .unwrap();
                     doc.id
                 };
                 let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
-                assert_eq!(db2.find_one::<TestStruct>(&id).await.unwrap().data.foo, "new");
+                assert_eq!(
+                    db2.find_one::<TestStruct>(&id).await.unwrap().data.foo,
+                    "new"
+                );
                 cleanup(file);
             }
 
@@ -681,7 +836,10 @@ macro_rules! serializer_round_trip_tests {
                 cleanup(file);
                 let id = {
                     let db = $DbType::new::<TestStruct>(stem).await.unwrap();
-                    let doc = db.insert_one(TestStruct { foo: "bye".into() }).await.unwrap();
+                    let doc = db
+                        .insert_one(TestStruct { foo: "bye".into() })
+                        .await
+                        .unwrap();
                     db.delete_one::<TestStruct>(&doc.id).await.unwrap();
                     doc.id
                 };
@@ -711,9 +869,9 @@ macro_rules! serializer_round_trip_tests {
     };
 }
 
-serializer_round_trip_tests!(bin,  BinDb,  "bin",  "bin_ser");
+serializer_round_trip_tests!(bin, BinDb, "bin", "bin_ser");
 serializer_round_trip_tests!(json, JsonDb, "json", "json_ser");
-serializer_round_trip_tests!(ron,  RonDb,  "ron",  "ron_ser");
+serializer_round_trip_tests!(ron, RonDb, "ron", "ron_ser");
 serializer_round_trip_tests!(yaml, YamlDb, "yaml", "yaml_ser");
 
 // ── HashIndex ─────────────────────────────────────────────────────────────────
@@ -726,18 +884,32 @@ async fn hash_index_lookup_persisted_data() {
     {
         let db = RonDb::new::<UserRec>(".it_index").await.unwrap();
         db.insert(vec![
-            UserRec { name: "alice".into(), role: "admin".into() },
-            UserRec { name: "bob".into(),   role: "user".into()  },
-            UserRec { name: "carol".into(), role: "admin".into() },
+            UserRec {
+                name: "alice".into(),
+                role: "admin".into(),
+            },
+            UserRec {
+                name: "bob".into(),
+                role: "user".into(),
+            },
+            UserRec {
+                name: "carol".into(),
+                role: "admin".into(),
+            },
         ])
         .await
         .unwrap();
     }
 
     let db2 = RonDb::new::<UserRec>(".it_index").await.unwrap();
-    db2.add_index::<UserRec, _>("by_role", |u| u.role.clone()).await.unwrap();
+    db2.add_index::<UserRec, _>("by_role", |u| u.role.clone())
+        .await
+        .unwrap();
 
-    let admins = db2.using_index::<UserRec>("by_role", "admin").await.unwrap();
+    let admins = db2
+        .using_index::<UserRec>("by_role", "admin")
+        .await
+        .unwrap();
     assert_eq!(admins.len(), 2);
 
     cleanup(file);
@@ -746,14 +918,41 @@ async fn hash_index_lookup_persisted_data() {
 #[tokio::test]
 async fn hash_index_stays_consistent_after_mutations() {
     let db = MemDb::new::<UserRec>("unused").await.unwrap();
-    db.add_index::<UserRec, _>("by_role", |u| u.role.clone()).await.unwrap();
+    db.add_index::<UserRec, _>("by_role", |u| u.role.clone())
+        .await
+        .unwrap();
 
-    let d1 = db.insert_one(UserRec { name: "alice".into(), role: "admin".into() }).await.unwrap();
-    let d2 = db.insert_one(UserRec { name: "bob".into(),   role: "user".into()  }).await.unwrap();
-    db.insert_one(UserRec { name: "carol".into(), role: "admin".into() }).await.unwrap();
+    let d1 = db
+        .insert_one(UserRec {
+            name: "alice".into(),
+            role: "admin".into(),
+        })
+        .await
+        .unwrap();
+    let d2 = db
+        .insert_one(UserRec {
+            name: "bob".into(),
+            role: "user".into(),
+        })
+        .await
+        .unwrap();
+    db.insert_one(UserRec {
+        name: "carol".into(),
+        role: "admin".into(),
+    })
+    .await
+    .unwrap();
 
     // Promote bob to admin
-    db.update_one(&d2.id, UserRec { name: "bob".into(), role: "admin".into() }).await.unwrap();
+    db.update_one(
+        &d2.id,
+        UserRec {
+            name: "bob".into(),
+            role: "admin".into(),
+        },
+    )
+    .await
+    .unwrap();
 
     let admins = db.using_index::<UserRec>("by_role", "admin").await.unwrap();
     assert_eq!(admins.len(), 3);

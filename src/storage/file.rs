@@ -10,10 +10,10 @@ use crate::error::{RedDbError, Result};
 use crate::serializer::{FormatId, Serializer};
 use crate::wal::WalOp;
 use crate::RedDbHM;
-use uuid::Uuid;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 /// 32-byte file header layout:
 /// [0..8]   magic   b"REDDB\x00\x02\x00"
@@ -269,28 +269,37 @@ mod tests {
     fn verify_header_fails_for_wrong_magic() {
         let mut h = build_header(FormatId::Bin);
         h[0] = 0xFF;
-        assert!(matches!(verify_header(&h, FormatId::Bin), Err(RedDbError::DataCorrupted)));
+        assert!(matches!(
+            verify_header(&h, FormatId::Bin),
+            Err(RedDbError::DataCorrupted)
+        ));
     }
 
     #[test]
     fn verify_header_fails_for_wrong_format() {
         let h = build_header(FormatId::Bin);
-        assert!(matches!(verify_header(&h, FormatId::Json), Err(RedDbError::DataCorrupted)));
+        assert!(matches!(
+            verify_header(&h, FormatId::Json),
+            Err(RedDbError::DataCorrupted)
+        ));
     }
 
     #[test]
     fn verify_header_fails_for_wrong_version() {
         let mut h = build_header(FormatId::Yaml);
         h[8] = 0xFF;
-        assert!(matches!(verify_header(&h, FormatId::Yaml), Err(RedDbError::DataCorrupted)));
+        assert!(matches!(
+            verify_header(&h, FormatId::Yaml),
+            Err(RedDbError::DataCorrupted)
+        ));
     }
 
     #[test]
     fn format_id_discriminants() {
         assert_eq!(FormatId::Json as u8, 0);
-        assert_eq!(FormatId::Ron  as u8, 1);
+        assert_eq!(FormatId::Ron as u8, 1);
         assert_eq!(FormatId::Yaml as u8, 2);
-        assert_eq!(FormatId::Bin  as u8, 3);
+        assert_eq!(FormatId::Bin as u8, 3);
     }
 
     #[test]

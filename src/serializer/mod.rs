@@ -25,18 +25,18 @@ pub use self::yaml::Yaml;
 #[repr(u8)]
 pub enum FormatId {
     Json = 0,
-    Ron  = 1,
+    Ron = 1,
     Yaml = 2,
-    Bin  = 3,
+    Bin = 3,
 }
 
 impl FormatId {
     pub fn extension(self) -> &'static str {
         match self {
-            FormatId::Bin  => ".bin",
+            FormatId::Bin => ".bin",
             FormatId::Json => ".json",
             FormatId::Yaml => ".yaml",
-            FormatId::Ron  => ".ron",
+            FormatId::Ron => ".ron",
         }
     }
 }
@@ -65,16 +65,16 @@ mod tests {
 
     #[test]
     fn format_id_extensions() {
-        assert_eq!(FormatId::Bin.extension(),  ".bin");
+        assert_eq!(FormatId::Bin.extension(), ".bin");
         assert_eq!(FormatId::Json.extension(), ".json");
         assert_eq!(FormatId::Yaml.extension(), ".yaml");
-        assert_eq!(FormatId::Ron.extension(),  ".ron");
+        assert_eq!(FormatId::Ron.extension(), ".ron");
     }
 
     #[test]
     fn format_id_copy_and_eq() {
         let a = FormatId::Json;
-        let b = a;  // Copy
+        let b = a; // Copy
         assert_eq!(a, b);
         assert_ne!(FormatId::Json, FormatId::Bin);
     }
