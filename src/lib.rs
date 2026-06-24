@@ -9,6 +9,8 @@ mod config;
 mod document;
 mod error;
 mod index;
+#[cfg(feature = "migrate")]
+pub mod migrate;
 mod query;
 pub mod serializer;
 mod storage;
