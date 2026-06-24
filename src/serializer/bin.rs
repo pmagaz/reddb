@@ -15,7 +15,10 @@ impl Serializer for Bin {
     where
         for<'de> T: Serialize + Deserialize<'de>,
     {
-        Ok(bincode::serde::encode_to_vec(data, bincode::config::standard())?)
+        Ok(bincode::serde::encode_to_vec(
+            data,
+            bincode::config::standard(),
+        )?)
     }
 
     fn deserialize<T>(&self, data: &[u8]) -> Result<T, Error>
