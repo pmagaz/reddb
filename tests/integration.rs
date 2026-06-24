@@ -632,6 +632,90 @@ async fn transaction_delete_survives_reopen() {
     cleanup(file);
 }
 
+// ── Cross-serializer persistence round-trip ───────────────────────────────────
+//
+// Each serializer gets the same four tests: insert / update / delete / compact,
+// all checked by dropping the DB and reopening. The macro is gated per feature.
+
+macro_rules! serializer_round_trip_tests {
+    ($mod_name:ident, $DbType:ident, $ext:literal, $feature:literal) => {
+        #[cfg(feature = $feature)]
+        mod $mod_name {
+            use super::*;
+            use reddb::$DbType;
+
+            #[tokio::test]
+            async fn insert_survives_reopen() {
+                let stem = concat!(".ser_", stringify!($mod_name), "_insert");
+                let file = concat!(".ser_", stringify!($mod_name), "_insert.", $ext);
+                cleanup(file);
+                let id = {
+                    let db = $DbType::new::<TestStruct>(stem).await.unwrap();
+                    db.insert_one(TestStruct { foo: "hello".into() }).await.unwrap().id
+                };
+                let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
+                assert_eq!(db2.find_one::<TestStruct>(&id).await.unwrap().data.foo, "hello");
+                cleanup(file);
+            }
+
+            #[tokio::test]
+            async fn update_survives_reopen() {
+                let stem = concat!(".ser_", stringify!($mod_name), "_update");
+                let file = concat!(".ser_", stringify!($mod_name), "_update.", $ext);
+                cleanup(file);
+                let id = {
+                    let db = $DbType::new::<TestStruct>(stem).await.unwrap();
+                    let doc = db.insert_one(TestStruct { foo: "old".into() }).await.unwrap();
+                    db.update_one(&doc.id, TestStruct { foo: "new".into() }).await.unwrap();
+                    doc.id
+                };
+                let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
+                assert_eq!(db2.find_one::<TestStruct>(&id).await.unwrap().data.foo, "new");
+                cleanup(file);
+            }
+
+            #[tokio::test]
+            async fn delete_survives_reopen() {
+                let stem = concat!(".ser_", stringify!($mod_name), "_delete");
+                let file = concat!(".ser_", stringify!($mod_name), "_delete.", $ext);
+                cleanup(file);
+                let id = {
+                    let db = $DbType::new::<TestStruct>(stem).await.unwrap();
+                    let doc = db.insert_one(TestStruct { foo: "bye".into() }).await.unwrap();
+                    db.delete_one::<TestStruct>(&doc.id).await.unwrap();
+                    doc.id
+                };
+                let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
+                assert!(db2.get::<TestStruct>(&id).await.unwrap().is_none());
+                cleanup(file);
+            }
+
+            #[tokio::test]
+            async fn compaction_survives_reopen() {
+                let stem = concat!(".ser_", stringify!($mod_name), "_compact");
+                let file = concat!(".ser_", stringify!($mod_name), "_compact.", $ext);
+                cleanup(file);
+                {
+                    let db = $DbType::new::<TestStruct>(stem).await.unwrap();
+                    let a = db.insert_one(TestStruct { foo: "a".into() }).await.unwrap();
+                    db.insert_one(TestStruct { foo: "b".into() }).await.unwrap();
+                    db.delete_one::<TestStruct>(&a.id).await.unwrap();
+                }
+                let db2 = $DbType::new::<TestStruct>(stem).await.unwrap();
+                let all = db2.find_all::<TestStruct>().await.unwrap();
+                assert_eq!(all.len(), 1);
+                assert_eq!(all[0].data.foo, "b");
+                cleanup(file);
+            }
+        }
+    };
+}
+
+serializer_round_trip_tests!(bin,  BinDb,  "bin",  "bin_ser");
+serializer_round_trip_tests!(json, JsonDb, "json", "json_ser");
+serializer_round_trip_tests!(ron,  RonDb,  "ron",  "ron_ser");
+serializer_round_trip_tests!(yaml, YamlDb, "yaml", "yaml_ser");
+
 // ── HashIndex ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
