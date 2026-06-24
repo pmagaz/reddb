@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/pmagaz/reddb/actions/workflows/ci.yml/badge.svg)](https://github.com/pmagaz/reddb/actions/workflows/ci.yml) [![Crates.io](https://img.shields.io/crates/v/reddb)](https://crates.io/crates/reddb)
 
-An async, in-memory embedded document database for Rust with optional WAL-based persistence.
+A minimalistic, async, in-memory embedded document database for Rust with optional WAL-based persistence.
 
 ## Features
 
